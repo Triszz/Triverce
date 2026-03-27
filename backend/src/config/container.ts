@@ -5,12 +5,16 @@ import { db } from "../infrastructure/database/db.client";
 import { UserRepository } from "../modules/user/user.repository";
 import { Kysely } from "kysely";
 import { DatabaseSchema } from "../infrastructure/database/db.schema";
+import { AuthService } from "../modules/auth/auth.service";
+import { AuthController } from "../modules/auth/auth.controller";
 
 // Định nghĩa interface cho container
 export interface ICradle {
   logger: ILogger;
   db: Kysely<DatabaseSchema>;
   userRepository: UserRepository;
+  authService: AuthService;
+  authController: AuthController;
 }
 
 const container = createContainer<ICradle>({
@@ -20,7 +24,9 @@ const container = createContainer<ICradle>({
 container.register({
   logger: asClass(ConsoleLogger).singleton(),
   db: asValue(db),
-  userRepository: asClass(UserRepository).singleton(),
+  userRepository: asClass(UserRepository).scoped(),
+  authService: asClass(AuthService).scoped(),
+  authController: asClass(AuthController).scoped(),
 });
 
 export { container };
