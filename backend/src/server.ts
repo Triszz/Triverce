@@ -17,5 +17,5 @@ db.selectFrom("users")
   .select("id")
   .limit(1)
   .execute()
-  .then(() => console.log("Database connected successfully!"))
-  .catch((err) => console.error("Database connection failed:", err.message));
+  .then(() => logger.info("Database connected successfully!"))
+  .catch((err) => logger.error(`Database connection failed: ${err.message}`));

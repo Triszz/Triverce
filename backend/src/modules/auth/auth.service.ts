@@ -69,7 +69,7 @@ export class AuthService {
     );
 
     if (!user || !isValid) {
-      throw new UnauthorizedError("Invalid email or password");
+      throw new UnauthorizedError("Incorrect email or password");
     }
 
     const payload: JwtPayload = { userId: user.id, role: user.role };
