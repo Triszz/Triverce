@@ -1,6 +1,4 @@
-import { Selectable } from "kysely";
-import { UsersTable } from "../../infrastructure/database/db.schema";
-
+import { UserRow } from "../../infrastructure/database/db.schema";
 export class UserEntity {
   constructor(
     private readonly _id: string,
@@ -33,7 +31,7 @@ export class UserEntity {
     return this._role === "seller";
   }
 
-  static fromDatabase(row: Selectable<UsersTable>): UserEntity {
+  static fromDatabase(row: UserRow): UserEntity {
     return new UserEntity(
       row.id,
       row.email,

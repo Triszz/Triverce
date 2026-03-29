@@ -1,6 +1,10 @@
 import { Kysely, PostgresDialect } from "kysely";
-import { Pool } from "pg";
+import { Pool, types } from "pg";
+import Decimal from "decimal.js";
 import { DatabaseSchema } from "./db.schema";
+
+// OID 1700 = NUMERIC/DECIMAL — parse string → number
+types.setTypeParser(1700, (value: string) => new Decimal(value).toNumber());
 
 const pool = new Pool({
   host: process.env.DB_HOST || "localhost",
