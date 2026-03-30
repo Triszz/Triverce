@@ -1,34 +1,20 @@
 import { UserRow } from "../../infrastructure/database/db.schema";
 export class UserEntity {
   constructor(
-    private readonly _id: string,
-    private readonly _email: string,
-    private readonly _passwordHash: string,
-    private readonly _role: "customer" | "admin" | "seller",
-    private readonly _createdAt: Date,
+    public readonly id: string,
+    public readonly email: string,
+    public readonly passwordHash: string,
+    public readonly role: "customer" | "admin" | "seller",
+    public readonly createdAt: Date,
   ) {}
 
-  // Getters
-  get id(): string {
-    return this._id;
-  }
-  get email(): string {
-    return this._email;
-  }
-  get passwordHash(): string {
-    return this._passwordHash;
-  }
-
-  get role(): "customer" | "admin" | "seller" {
-    return this._role;
-  }
-
+  // Business rules
   isAdmin(): boolean {
-    return this._role === "admin";
+    return this.role === "admin";
   }
 
   isSeller(): boolean {
-    return this._role === "seller";
+    return this.role === "seller";
   }
 
   static fromDatabase(row: UserRow): UserEntity {
@@ -43,10 +29,10 @@ export class UserEntity {
 
   toPublic() {
     return {
-      id: this._id,
-      email: this._email,
-      role: this._role,
-      createdAt: this._createdAt,
+      id: this.id,
+      email: this.email,
+      role: this.role,
+      createdAt: this.createdAt,
     };
   }
 }
