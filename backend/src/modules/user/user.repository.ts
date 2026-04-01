@@ -5,6 +5,7 @@ import { UserEntity } from "./user.entity";
 export class UserRepository {
   constructor(private db: Kysely<DatabaseSchema>) {}
 
+  // Find user by id
   async findById(id: string): Promise<UserEntity | null> {
     const row = await this.db
       .selectFrom("users")
@@ -15,6 +16,7 @@ export class UserRepository {
     return row ? UserEntity.fromDatabase(row) : null;
   }
 
+  // Find user by email
   async findByEmail(email: string): Promise<UserEntity | null> {
     const row = await this.db
       .selectFrom("users")
@@ -25,6 +27,7 @@ export class UserRepository {
     return row ? UserEntity.fromDatabase(row) : null;
   }
 
+  // Create user
   async create(data: {
     email: string;
     passwordHash: string;
