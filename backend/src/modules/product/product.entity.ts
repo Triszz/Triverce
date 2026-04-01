@@ -41,6 +41,10 @@ export class ProductEntity {
     return prices.length > 0 ? Math.max(...prices) : this.basePrice;
   }
 
+  isSimpleProduct(): boolean {
+    return this.variants.length === 1 && this.variants[0].isSimpleVariant();
+  }
+
   static fromDatabase(
     row: ProductRow,
     variants: ProductVariantEntity[] = [],

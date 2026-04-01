@@ -34,6 +34,10 @@ export class ProductVariantEntity {
     return attr?.value ?? null;
   }
 
+  isSimpleVariant(): boolean {
+    return this.attributes.length === 0;
+  }
+
   static fromDatabase(
     row: ProductVariantRow,
     attributes: VariantAttribute[] = [],

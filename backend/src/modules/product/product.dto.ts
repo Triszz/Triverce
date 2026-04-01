@@ -17,13 +17,10 @@ const VariantSchema = z.object({
   // attributes: { "color": "Red", "size": "XL" }
   attributes: z
     .record(
-      z.string().min(1), // key: attribute name ("Red")
-      z.string().min(1), // Value: attribute value ("XL")
+      z.string().min(1), // key: attribute name ("color")
+      z.string().min(1), // Value: attribute value ("Red")
     )
-    .refine(
-      (attrs) => Object.keys(attrs).length > 0,
-      "Variant must have at least one attribute",
-    ),
+    .default({}),
 });
 
 // Create Product
