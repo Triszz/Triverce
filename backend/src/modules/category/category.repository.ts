@@ -10,7 +10,7 @@ import { CategoryQuery } from "./category.dto";
 export class CategoryRepository {
   constructor(private db: Kysely<DatabaseSchema>) {}
 
-  // Find all categories
+  // Find categories
   async findAll(
     query: CategoryQuery,
   ): Promise<{ data: CategoryEntity[]; total: number }> {
