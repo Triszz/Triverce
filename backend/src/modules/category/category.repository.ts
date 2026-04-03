@@ -69,6 +69,7 @@ export class CategoryRepository {
       .selectFrom("categories")
       .selectAll()
       .where("slug", "=", slug)
+      .where("is_active", "=", true)
       .executeTakeFirst();
 
     return row ? CategoryEntity.fromDatabase(row) : null;

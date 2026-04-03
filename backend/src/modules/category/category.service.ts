@@ -14,7 +14,7 @@ import {
 export class CategoryService {
   constructor(private categoryRepository: CategoryRepository) {}
 
-  // Get categories
+  // Get categories (filter)
   async getAll(
     query: CategoryQuery,
   ): Promise<{ data: CategoryEntity[]; total: number }> {
@@ -26,6 +26,14 @@ export class CategoryService {
     const category = await this.categoryRepository.findById(id);
     if (!category)
       throw new NotFoundError(`Category with id "${id}" not found`);
+    return category;
+  }
+
+  // Get category by slug
+  async getBySlug(slug: string): Promise<CategoryEntity> {
+    const category = await this.categoryRepository.findBySlug(slug);
+    if (!category)
+      throw new NotFoundError(`Category with slug "${slug}" not found`);
     return category;
   }
 
@@ -104,7 +112,7 @@ export class CategoryService {
   }
 
   // Delete category
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string): Promise<void> {
     const existing = await this.categoryRepository.findById(id);
     if (!existing)
       throw new NotFoundError(`Category with id "${id}" not found`);
@@ -116,6 +124,6 @@ export class CategoryService {
         `Cannot delete: this category has ${childCount} ${childCount > 1 ? "subcategories" : "subcategory"}. Please delete ${childCount > 1 ? "them" : "it"} first.`,
       );
     }
-    return await this.categoryRepository.delete(id);
+    await this.categoryRepository.delete(id);
   }
 }
