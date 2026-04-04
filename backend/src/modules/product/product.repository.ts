@@ -316,9 +316,11 @@ export class ProductRepository {
       .updateTable("products")
       .set({
         deleted_at: new Date(),
+        is_active: false,
         slug: sql`slug || '-' || EXTRACT(EPOCH FROM NOW())`,
       })
       .where("id", "=", id)
+      .where("deleted_at", "is", null)
       .executeTakeFirst();
 
     return Number(result.numUpdatedRows) > 0;

@@ -31,6 +31,11 @@ export const validateQuery =
         })),
       });
     }
-    req.query = result.data as any;
+    Object.defineProperty(req, "query", {
+      value: result.data,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
     next();
   };
