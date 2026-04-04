@@ -10,6 +10,7 @@ export interface UsersTable {
   id: Generated<string>;
   email: string;
   password_hash: string;
+  full_name: string;
   role: "customer" | "admin" | "seller";
   deleted_at: Date | null;
   created_at: Generated<Date>;

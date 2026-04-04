@@ -52,6 +52,8 @@ export class AuthService {
     const user = await this.userRepository.create({
       email: dto.email,
       passwordHash,
+      fullName: dto.fullName,
+      role: dto.role,
     });
     return user.toPublic();
   }

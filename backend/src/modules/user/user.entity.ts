@@ -4,6 +4,7 @@ export class UserEntity {
     public readonly id: string,
     public readonly email: string,
     public readonly passwordHash: string,
+    public readonly fullName: string,
     public readonly role: "customer" | "admin" | "seller",
     public readonly createdAt: Date,
   ) {}
@@ -22,6 +23,7 @@ export class UserEntity {
       row.id,
       row.email,
       row.password_hash,
+      row.full_name,
       row.role,
       new Date(row.created_at),
     );
@@ -31,6 +33,7 @@ export class UserEntity {
     return {
       id: this.id,
       email: this.email,
+      fullName: this.fullName,
       role: this.role,
       createdAt: this.createdAt,
     };

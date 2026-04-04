@@ -33,6 +33,7 @@ export class UserRepository {
   async create(data: {
     email: string;
     passwordHash: string;
+    fullName: string;
     role?: "customer" | "admin" | "seller";
   }): Promise<UserEntity> {
     const row = await this.db
@@ -40,6 +41,7 @@ export class UserRepository {
       .values({
         email: data.email,
         password_hash: data.passwordHash,
+        full_name: data.fullName,
         role: data.role ?? "customer",
       })
       .returningAll()
