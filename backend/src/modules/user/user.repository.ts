@@ -11,6 +11,7 @@ export class UserRepository {
       .selectFrom("users")
       .selectAll()
       .where("id", "=", id)
+      .where("deleted_at", "is", null)
       .executeTakeFirst();
 
     return row ? UserEntity.fromDatabase(row) : null;
@@ -22,6 +23,7 @@ export class UserRepository {
       .selectFrom("users")
       .selectAll()
       .where("email", "=", email)
+      .where("deleted_at", "is", null)
       .executeTakeFirst();
 
     return row ? UserEntity.fromDatabase(row) : null;
@@ -43,6 +45,18 @@ export class UserRepository {
       .returningAll()
       .executeTakeFirstOrThrow();
     return UserEntity.fromDatabase(row);
+  }
+
+  // Delete user
+  async delete(id: string): Promise<boolean> {
+    const result = await this.db
+      .updateTable("users")
+      .set({ deleted_at: new Date() })
+      .where("id", "=", id)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
+
+    return Number(result.numUpdatedRows) > 0;
   }
 
   async emailExists(email: string): Promise<boolean> {

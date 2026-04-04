@@ -11,6 +11,7 @@ export interface UsersTable {
   email: string;
   password_hash: string;
   role: "customer" | "admin" | "seller";
+  deleted_at: Date | null;
   created_at: Generated<Date>;
 }
 
@@ -29,11 +30,13 @@ export interface CategoriesTable {
 export interface ProductsTable {
   id: Generated<string>;
   category_id: string | null;
+  seller_id: string;
   name: string;
   slug: string;
   description: string | null;
   base_price: ColumnType<number, string | number, string | number>;
   is_active: Generated<boolean>;
+  deleted_at: Date | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

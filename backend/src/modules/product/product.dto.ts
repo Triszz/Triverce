@@ -25,7 +25,7 @@ const VariantSchema = z.object({
 
 // Create Product
 export const CreateProductSchema = z.object({
-  categoryId: z.uuid("categoryId must a valid UUID").optional(),
+  categoryId: z.uuid("categoryId must be a valid UUID").optional(),
   name: z
     .string()
     .min(3, "Product name must have at least 3 characters")

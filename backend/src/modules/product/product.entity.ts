@@ -4,6 +4,7 @@ import { ProductVariantEntity } from "./product-variant.entity";
 export class ProductEntity {
   constructor(
     public readonly id: string,
+    public readonly sellerId: string,
     public readonly categoryId: string | null,
     public readonly name: string,
     public readonly slug: string,
@@ -51,6 +52,7 @@ export class ProductEntity {
   ): ProductEntity {
     return new ProductEntity(
       row.id,
+      row.seller_id,
       row.category_id,
       row.name,
       row.slug,
@@ -67,6 +69,7 @@ export class ProductEntity {
   toPublicSummary() {
     return {
       id: this.id,
+      sellerId: this.sellerId,
       name: this.name,
       slug: this.slug,
       basePrice: this.basePrice,
@@ -80,6 +83,7 @@ export class ProductEntity {
   toPublicDetail() {
     return {
       id: this.id,
+      sellerId: this.sellerId,
       categoryId: this.categoryId,
       name: this.name,
       slug: this.slug,

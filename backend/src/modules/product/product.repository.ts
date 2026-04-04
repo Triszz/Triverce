@@ -1,4 +1,4 @@
-import { Kysely } from "kysely";
+import { Kysely, sql } from "kysely";
 import {
   DatabaseSchema,
   ProductRow,
@@ -23,7 +23,9 @@ export class ProductRepository {
   async findAll(
     query: ProductQuery,
   ): Promise<{ data: ProductEntity[]; total: number }> {
-    let baseQuery = this.db.selectFrom("products");
+    let baseQuery = this.db
+      .selectFrom("products")
+      .where("deleted_at", "is", null);
 
     if (query.categoryId) {
       baseQuery = baseQuery.where(
@@ -45,7 +47,7 @@ export class ProductRepository {
       baseQuery = baseQuery.where(
         "name",
         "ilike",
-        `%${query.search}`,
+        `%${query.search}%`,
       ) as typeof baseQuery;
     }
 
@@ -79,7 +81,7 @@ export class ProductRepository {
       created_desc: ["created_at", "desc"],
     } as const;
 
-    const [sortCol, sortDir] = sortMap[query.sortBy];
+    const [sortCol, sortDir] = sortMap[query.sortBy] ?? ["created_at", "desc"];
 
     const rows = (await baseQuery
       .selectAll()
@@ -154,6 +156,7 @@ export class ProductRepository {
       .selectFrom("products")
       .selectAll()
       .where("id", "=", id)
+      .where("deleted_at", "is", null)
       .executeTakeFirst()) as ProductRow | undefined;
 
     if (!row) return null;
@@ -168,6 +171,7 @@ export class ProductRepository {
       .selectFrom("products")
       .selectAll()
       .where("slug", "=", slug)
+      .where("deleted_at", "is", null)
       .executeTakeFirst();
 
     if (!row) return null;
@@ -177,12 +181,16 @@ export class ProductRepository {
   }
 
   // Create product
-  async create(dto: CreateProductDto): Promise<ProductEntity> {
+  async create(
+    dto: CreateProductDto,
+    sellerId: string,
+  ): Promise<ProductEntity> {
     return await this.db.transaction().execute(async (trx) => {
       // 1. Insert product
       const productRow = (await trx
         .insertInto("products")
         .values({
+          seller_id: sellerId,
           category_id: dto.categoryId ?? null,
           name: dto.name,
           slug: dto.slug,
@@ -305,11 +313,15 @@ export class ProductRepository {
   // Delete product
   async delete(id: string): Promise<boolean> {
     const result = await this.db
-      .deleteFrom("products")
+      .updateTable("products")
+      .set({
+        deleted_at: new Date(),
+        slug: sql`slug || '-' || EXTRACT(EPOCH FROM NOW())`,
+      })
       .where("id", "=", id)
       .executeTakeFirst();
 
-    return Number(result.numDeletedRows) > 0;
+    return Number(result.numUpdatedRows) > 0;
   }
 
   // Add variant

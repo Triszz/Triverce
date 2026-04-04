@@ -3,7 +3,7 @@ import { validate } from "../../core/middleware/validate.middleware";
 import { RegisterSchema, LoginSchema } from "./auth.dto";
 import { AuthController } from "./auth.controller";
 
-export const createAuthRoute = (authController: AuthController) => {
+export const createAuthRouter = (authController: AuthController) => {
   const router = Router();
 
   router.post("/register", validate(RegisterSchema), authController.register);

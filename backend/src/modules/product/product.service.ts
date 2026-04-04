@@ -12,6 +12,7 @@ import {
   NotFoundError,
   ConflictError,
   BadRequestError,
+  ForbiddenError,
 } from "../../core/errors/AppError";
 
 export class ProductService {
@@ -40,7 +41,10 @@ export class ProductService {
   }
 
   // Create product
-  async create(dto: CreateProductDto): Promise<ProductEntity> {
+  async create(
+    dto: CreateProductDto,
+    sellerId: string,
+  ): Promise<ProductEntity> {
     // Check duplicate slug
     const slugTaken = await this.productRepository.slugExists(dto.slug);
     if (slugTaken) throw new ConflictError(`Slug "${dto.slug}" already exists`);
@@ -57,13 +61,19 @@ export class ProductService {
       if (exists) throw new ConflictError(`SKU "${sku}" already exists`);
     }
 
-    return this.productRepository.create(dto);
+    return this.productRepository.create(dto, sellerId);
   }
 
   // Update product
-  async update(id: string, dto: UpdateProductDto): Promise<ProductEntity> {
+  async update(
+    id: string,
+    dto: UpdateProductDto,
+    user: { userId: string; role: string },
+  ): Promise<ProductEntity> {
     const product = await this.productRepository.findById(id);
     if (!product) throw new NotFoundError(`Product with id "${id}" not found`);
+
+    this.verifyOwnership(product, user);
 
     if (dto.slug) {
       const slugTaken = await this.productRepository.slugExists(dto.slug, id);
@@ -84,9 +94,15 @@ export class ProductService {
   }
 
   // Delete product
-  async delete(id: string): Promise<void> {
+  async delete(
+    id: string,
+    user: { userId: string; role: string },
+  ): Promise<void> {
     const existing = await this.productRepository.findById(id);
     if (!existing) throw new NotFoundError(`Product with id "${id}" not found`);
+
+    this.verifyOwnership(existing, user);
+
     await this.productRepository.delete(id);
   }
 
@@ -94,10 +110,13 @@ export class ProductService {
   async addVariant(
     productId: string,
     dto: AddVariantDto,
+    user: { userId: string; role: string },
   ): Promise<ProductVariantEntity> {
     const product = await this.productRepository.findById(productId);
     if (!product)
       throw new NotFoundError(`Product with id "${productId}" not found`);
+
+    this.verifyOwnership(product, user);
 
     const skuExists = await this.productRepository.skuExists(dto.sku);
     if (skuExists) throw new ConflictError(`SKU "${dto.sku}" already exists`);
@@ -110,10 +129,13 @@ export class ProductService {
     productId: string,
     variantId: string,
     dto: UpdateVariantDto,
+    user: { userId: string; role: string },
   ): Promise<ProductVariantEntity> {
     const product = await this.productRepository.findById(productId);
     if (!product)
       throw new NotFoundError(`Product with id "${productId}" not found`);
+
+    this.verifyOwnership(product, user);
 
     // Check variant belongs to product
     const variant = product.variants.find((v) => v.id === variantId);
@@ -136,10 +158,16 @@ export class ProductService {
   }
 
   // Delete variant
-  async deleteVariant(productId: string, variantId: string): Promise<void> {
+  async deleteVariant(
+    productId: string,
+    variantId: string,
+    user: { userId: string; role: string },
+  ): Promise<void> {
     const product = await this.productRepository.findById(productId);
     if (!product)
       throw new NotFoundError(`Product with id "${productId}" not found`);
+
+    this.verifyOwnership(product, user);
 
     // Not allow to delete the last variant
     const variantCount = await this.productRepository.countVariants(productId);
@@ -157,5 +185,19 @@ export class ProductService {
     }
 
     await this.productRepository.deleteVariant(variantId);
+  }
+
+  // Helpers
+  private verifyOwnership(
+    product: ProductEntity,
+    user: { userId: string; role: string },
+  ) {
+    if (user.role === "admin") return;
+
+    if (product.sellerId !== user.userId) {
+      throw new ForbiddenError(
+        "You do not have permission to modify this product",
+      );
+    }
   }
 }
