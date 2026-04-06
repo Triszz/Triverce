@@ -13,20 +13,28 @@ import { CategoryController } from "../modules/category/category.controller";
 import { ProductRepository } from "../modules/product/product.repository";
 import { ProductService } from "../modules/product/product.service";
 import { ProductController } from "../modules/product/product.controller";
-
+import { LocalUploadService } from "../modules/upload/upload.service";
+import { UploadController } from "../modules/upload/upload.controller";
 // Định nghĩa interface cho container
 export interface ICradle {
   logger: ILogger;
   db: Kysely<DatabaseSchema>;
+  // User
   userRepository: UserRepository;
+  // Auth
   authService: AuthService;
   authController: AuthController;
+  // Category
   categoryRepository: CategoryRepository;
   categoryService: CategoryService;
   categoryController: CategoryController;
+  // Product
   productRepository: ProductRepository;
   productService: ProductService;
   productController: ProductController;
+  // Upload
+  uploadService: LocalUploadService;
+  uploadController: UploadController;
 }
 
 const container = createContainer<ICradle>({
@@ -38,7 +46,7 @@ container.register({
   db: asValue(db),
   // User
   userRepository: asClass(UserRepository).scoped(),
-  //Auth
+  // Auth
   authService: asClass(AuthService).scoped(),
   authController: asClass(AuthController).scoped(),
   // Category
@@ -49,6 +57,9 @@ container.register({
   productRepository: asClass(ProductRepository).scoped(),
   productService: asClass(ProductService).scoped(),
   productController: asClass(ProductController).scoped(),
+  // Upload
+  uploadService: asClass(LocalUploadService).singleton(),
+  uploadController: asClass(UploadController).scoped(),
 });
 
 export { container };
