@@ -14,7 +14,7 @@ export class InventoryService {
     private productRepository: ProductRepository,
   ) {}
 
-  // Get inventory by variant id
+  // Get inventory of 1 variant
   async getByVariantId(variantId: string): Promise<InventoryEntity> {
     const inventory = await this.inventoryRepository.findByVariantId(variantId);
     if (!inventory)
@@ -24,7 +24,7 @@ export class InventoryService {
     return inventory;
   }
 
-  // Get inventory of 1 product
+  // Get inventories of 1 product
   async getByProductId(productId: string): Promise<InventoryEntity[]> {
     const product = await this.productRepository.findById(productId);
     if (!product)

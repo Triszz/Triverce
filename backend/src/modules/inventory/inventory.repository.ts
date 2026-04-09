@@ -10,7 +10,7 @@ import { InventoryEntity } from "./inventory.entity";
 export class InventoryRepository {
   constructor(private db: Kysely<DatabaseSchema>) {}
 
-  // Find inventory by variant id
+  // Find inventory of 1 variant
   async findByVariantId(variantId: string): Promise<InventoryEntity | null> {
     const row = await this.db
       .selectFrom("inventory")
@@ -21,7 +21,7 @@ export class InventoryRepository {
     return row ? InventoryEntity.fromDatabase(row) : null;
   }
 
-  // Find inventory of 1 product
+  // Find inventories of 1 product
   async findByProductId(productId: string): Promise<InventoryEntity[]> {
     const rows = await this.db
       .selectFrom("inventory")

@@ -15,6 +15,10 @@ import { ProductService } from "../modules/product/product.service";
 import { ProductController } from "../modules/product/product.controller";
 import { LocalUploadService } from "../modules/upload/upload.service";
 import { UploadController } from "../modules/upload/upload.controller";
+import { InventoryRepository } from "../modules/inventory/inventory.repository";
+import { InventoryService } from "../modules/inventory/inventory.service";
+import { InventoryController } from "../modules/inventory/inventory.controller";
+
 // Định nghĩa interface cho container
 export interface ICradle {
   logger: ILogger;
@@ -35,6 +39,10 @@ export interface ICradle {
   // Upload
   uploadService: LocalUploadService;
   uploadController: UploadController;
+  // Inventory
+  inventoryRepository: InventoryRepository;
+  inventoryService: InventoryService;
+  inventoryController: InventoryController;
 }
 
 const container = createContainer<ICradle>({
@@ -60,6 +68,10 @@ container.register({
   // Upload
   uploadService: asClass(LocalUploadService).singleton(),
   uploadController: asClass(UploadController).scoped(),
+  // Inventory
+  inventoryRepository: asClass(InventoryRepository).scoped(),
+  inventoryService: asClass(InventoryService).scoped(),
+  inventoryController: asClass(InventoryController).scoped(),
 });
 
 export { container };
