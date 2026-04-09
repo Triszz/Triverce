@@ -476,4 +476,17 @@ export class ProductRepository {
 
     return Number(count);
   }
+
+  // Find seller_id from variant_id (Helper for Inventory/Cart)
+  async getSellerIdByVariantId(variantId: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom("product_variants")
+      .innerJoin("products", "products.id", "product_variants.product_id")
+      .select("products.seller_id")
+      .where("product_variants.id", "=", variantId)
+      .where("products.deleted_at", "is", null)
+      .executeTakeFirst();
+
+    return row?.seller_id ?? null;
+  }
 }
