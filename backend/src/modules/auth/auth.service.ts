@@ -1,7 +1,11 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { UserRepository } from "../user/user.repository";
-import { ConflictError, UnauthorizedError } from "../../core/errors/AppError";
+import {
+  ConflictError,
+  UnauthorizedError,
+  ForbiddenError,
+} from "../../core/errors/AppError";
 import { RegisterDto, LoginDto } from "./auth.dto";
 
 export interface JwtPayload {
@@ -72,6 +76,10 @@ export class AuthService {
 
     if (!user || !isValid) {
       throw new UnauthorizedError("Incorrect email or password");
+    }
+
+    if (!user.isActive) {
+      throw new ForbiddenError("Your account has been deactivated");
     }
 
     const payload: JwtPayload = { userId: user.id, role: user.role };

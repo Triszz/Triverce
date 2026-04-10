@@ -12,6 +12,7 @@ export class UserRepository {
       .selectAll()
       .where("id", "=", id)
       .where("deleted_at", "is", null)
+      .where("is_active", "=", true)
       .executeTakeFirst();
 
     return row ? UserEntity.fromDatabase(row) : null;
@@ -49,11 +50,57 @@ export class UserRepository {
     return UserEntity.fromDatabase(row);
   }
 
+  // Update user
+  async update(
+    id: string,
+    data: Partial<{
+      fullName: string;
+      passwordHash: string;
+    }>,
+  ): Promise<UserEntity | null> {
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date(),
+    };
+
+    if (data.fullName !== undefined) updateData.full_name = data.fullName;
+    if (data.passwordHash !== undefined)
+      updateData.password_hash = data.passwordHash;
+
+    const row = await this.db
+      .updateTable("users")
+      .set(updateData)
+      .where("id", "=", id)
+      .where("deleted_at", "is", null)
+      .returningAll()
+      .executeTakeFirst();
+
+    return row ? UserEntity.fromDatabase(row) : null;
+  }
+
+  // Set user active status - admin only
+  async setActiveStatus(
+    id: string,
+    isActive: boolean,
+  ): Promise<UserEntity | null> {
+    const row = await this.db
+      .updateTable("users")
+      .set({
+        is_active: isActive,
+        updated_at: new Date(),
+      })
+      .where("id", "=", id)
+      .where("deleted_at", "is", null)
+      .returningAll()
+      .executeTakeFirst();
+
+    return row ? UserEntity.fromDatabase(row) : null;
+  }
+
   // Delete user
   async delete(id: string): Promise<boolean> {
     const result = await this.db
       .updateTable("users")
-      .set({ deleted_at: new Date() })
+      .set({ deleted_at: new Date(), is_active: false, updated_at: new Date() })
       .where("id", "=", id)
       .where("deleted_at", "is", null)
       .executeTakeFirst();

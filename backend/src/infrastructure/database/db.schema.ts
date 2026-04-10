@@ -11,9 +11,11 @@ export interface UsersTable {
   email: string;
   password_hash: string;
   full_name: string;
-  role: "customer" | "admin" | "seller";
+  role: Generated<"customer" | "admin" | "seller">;
+  is_active: Generated<boolean>;
   deleted_at: Date | null;
   created_at: Generated<Date>;
+  updated_at: Generated<Date>;
 }
 
 export interface CategoriesTable {
@@ -75,6 +77,23 @@ export interface InventoryTable {
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
+
+export interface CartTable {
+  id: Generated<string>;
+  user_id: string;
+  status: Generated<"active" | "checked_out" | "abandoned">;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface CartItemTable {
+  id: Generated<string>;
+  cart_id: string;
+  variant_id: string;
+  quantity: number;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
 export interface DatabaseSchema {
   users: UsersTable;
   categories: CategoriesTable;
@@ -83,6 +102,8 @@ export interface DatabaseSchema {
   product_variants: ProductVariantsTable;
   variant_attribute_values: VariantAttributeValuesTable;
   inventory: InventoryTable;
+  carts: CartTable;
+  cart_items: CartItemTable;
 }
 
 export type UserRow = Selectable<UsersTable>;
@@ -109,3 +130,11 @@ export type NewVariantAttributeValue = Insertable<VariantAttributeValuesTable>;
 export type InventoryRow = Selectable<InventoryTable>;
 export type NewInventory = Insertable<InventoryTable>;
 export type InventoryUpdate = Updateable<InventoryTable>;
+
+export type CartRow = Selectable<CartTable>;
+export type NewCart = Insertable<CartTable>;
+export type CartUpdate = Updateable<CartTable>;
+
+export type CartItemRow = Selectable<CartItemTable>;
+export type NewCartItem = Insertable<CartItemTable>;
+export type CartItemUpdate = Updateable<CartItemTable>;
