@@ -134,6 +134,13 @@ export type InventoryUpdate = Updateable<InventoryTable>;
 export type CartRow = Selectable<CartTable>;
 export type NewCart = Insertable<CartTable>;
 export type CartUpdate = Updateable<CartTable>;
+export type CartItemWithDetails = CartItemRow & {
+  variant_sku: string | undefined;
+  variant_price: number | undefined;
+  variant_image_url: string | null | undefined;
+  product_name: string | undefined;
+  product_slug: string | undefined;
+};
 
 export type CartItemRow = Selectable<CartItemTable>;
 export type NewCartItem = Insertable<CartItemTable>;
