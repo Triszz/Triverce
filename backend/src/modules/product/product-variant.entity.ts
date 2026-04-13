@@ -1,5 +1,7 @@
-import { ProductVariantRow } from "../../infrastructure/database/db.schema";
+import { ProductVariantWithStock } from "../../infrastructure/database/db.schema";
+export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
 
+const LOW_STOCK_THRESHOLD = 5;
 export interface VariantAttribute {
   attributeId: string;
   attributeName: string;
@@ -16,6 +18,7 @@ export class ProductVariantEntity {
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
     public readonly attributes: ReadonlyArray<VariantAttribute> = [],
+    public readonly available?: number,
   ) {
     if (price < 0) {
       throw new Error("Variant price cannot be negative");
@@ -23,8 +26,14 @@ export class ProductVariantEntity {
   }
 
   // Business rules
+  get stockStatus(): StockStatus {
+    if (this.available === undefined) return "in_stock";
+    if (this.available <= 0) return "out_of_stock";
+    if (this.available <= LOW_STOCK_THRESHOLD) return "low_stock";
+    return "in_stock";
+  }
   isAvailable(): boolean {
-    return this.isActive;
+    return this.isActive && this.stockStatus !== "out_of_stock";
   }
 
   getAttributeValue(attributeName: string): string | null {
@@ -39,7 +48,7 @@ export class ProductVariantEntity {
   }
 
   static fromDatabase(
-    row: ProductVariantRow,
+    row: ProductVariantWithStock,
     attributes: VariantAttribute[] = [],
   ): ProductVariantEntity {
     return new ProductVariantEntity(
@@ -52,6 +61,7 @@ export class ProductVariantEntity {
       new Date(row.created_at),
       new Date(row.updated_at),
       attributes,
+      row.available != null ? Number(row.available) : undefined,
     );
   }
 
@@ -66,6 +76,7 @@ export class ProductVariantEntity {
       attributes: this.attributes,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+      stockStatus: this.stockStatus,
     };
   }
 }

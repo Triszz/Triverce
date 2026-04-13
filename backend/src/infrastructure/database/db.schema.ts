@@ -123,6 +123,9 @@ export type ProductAttributeRow = Selectable<ProductAttributesTable>;
 export type ProductVariantRow = Selectable<ProductVariantsTable>;
 export type NewProductVariant = Insertable<ProductVariantsTable>;
 export type ProductVariantUpdate = Updateable<ProductVariantsTable>;
+export type ProductVariantWithStock = ProductVariantRow & {
+  available?: number | null;
+};
 
 export type VariantAttributeValueRow = Selectable<VariantAttributeValuesTable>;
 export type NewVariantAttributeValue = Insertable<VariantAttributeValuesTable>;

@@ -100,12 +100,24 @@ export class ProductRepository {
     productId: string,
   ): Promise<ProductVariantEntity[]> {
     // Query 1: Select variants
-    const variantRows = (await this.db
+    const variantRows = await this.db
       .selectFrom("product_variants")
-      .selectAll()
-      .where("product_id", "=", productId)
-      .orderBy("created_at", "asc")
-      .execute()) as ProductVariantRow[];
+      .leftJoin("inventory", "inventory.variant_id", "product_variants.id")
+      .select([
+        "product_variants.id",
+        "product_variants.product_id",
+        "product_variants.sku",
+        "product_variants.price",
+        "product_variants.image_url",
+        "product_variants.is_active",
+        "product_variants.created_at",
+        "product_variants.updated_at",
+        sql<number>`inventory.quantity - inventory.reserved`.as("available"),
+      ])
+      .where("product_variants.product_id", "=", productId)
+      .where("product_variants.is_active", "=", true)
+      .orderBy("product_variants.created_at", "asc")
+      .execute();
 
     if (variantRows.length === 0) return [];
 

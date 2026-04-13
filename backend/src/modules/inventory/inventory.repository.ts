@@ -1,12 +1,8 @@
-import { Kysely } from "kysely";
-import {
-  DatabaseSchema,
-  InventoryRow,
-  InventoryUpdate,
-  NewInventory,
-} from "../../infrastructure/database/db.schema";
+import { Kysely, Transaction } from "kysely";
+import { DatabaseSchema } from "../../infrastructure/database/db.schema";
 import { InventoryEntity } from "./inventory.entity";
 
+type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
 export class InventoryRepository {
   constructor(private db: Kysely<DatabaseSchema>) {}
 
@@ -81,8 +77,13 @@ export class InventoryRepository {
   }
 
   // Reserve when add in cart
-  async reserve(variantId: string, qty: number): Promise<InventoryEntity> {
-    const row = await this.db
+  async reserve(
+    variantId: string,
+    qty: number,
+    trx?: DbOrTrx,
+  ): Promise<InventoryEntity> {
+    const db = trx ?? this.db;
+    const row = await db
       .updateTable("inventory")
       .set((eb) => ({
         reserved: eb("reserved", "+", qty),
@@ -99,8 +100,13 @@ export class InventoryRepository {
   }
 
   // Release reserve when delete from cart
-  async release(variantId: string, qty: number): Promise<InventoryEntity> {
-    const row = await this.db
+  async release(
+    variantId: string,
+    qty: number,
+    trx?: DbOrTrx,
+  ): Promise<InventoryEntity> {
+    const db = trx ?? this.db;
+    const row = await db
       .updateTable("inventory")
       .set((eb) => ({
         reserved: eb("reserved", "-", qty),

@@ -1,11 +1,15 @@
-import { Kysely } from "kysely";
+import { Kysely, Transaction } from "kysely";
 import { DatabaseSchema } from "../../infrastructure/database/db.schema";
 import { CartEntity } from "./cart.entity";
 import { CartItemEntity } from "./cart-item.entity";
 
+type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
 export class CartRepository {
   constructor(private db: Kysely<DatabaseSchema>) {}
 
+  get client(): Kysely<DatabaseSchema> {
+    return this.db;
+  }
   // Find cart active of user (with items information)
   async findActiveByUserId(userId: string): Promise<CartEntity | null> {
     const cartRow = await this.db
@@ -43,8 +47,10 @@ export class CartRepository {
     cartId: string,
     variantId: string,
     quantity: number,
+    trx?: DbOrTrx,
   ): Promise<CartItemEntity> {
-    const row = await this.db
+    const db = trx ?? this.db;
+    const row = await db
       .insertInto("cart_items")
       .values({
         cart_id: cartId,
@@ -68,8 +74,10 @@ export class CartRepository {
     cartId: string,
     cartItemId: string,
     quantity: number,
+    trx?: DbOrTrx,
   ): Promise<CartItemEntity | null> {
-    const row = await this.db
+    const db = trx ?? this.db;
+    const row = await db
       .updateTable("cart_items")
       .set({ quantity, updated_at: new Date() })
       .where("id", "=", cartItemId)
@@ -81,8 +89,13 @@ export class CartRepository {
   }
 
   // Remove 1 item from cart
-  async removeItem(cartId: string, cartItemId: string): Promise<boolean> {
-    const result = await this.db
+  async removeItem(
+    cartId: string,
+    cartItemId: string,
+    trx?: DbOrTrx,
+  ): Promise<boolean> {
+    const db = trx ?? this.db;
+    const result = await db
       .deleteFrom("cart_items")
       .where("id", "=", cartItemId)
       .where("cart_id", "=", cartId)
@@ -92,11 +105,9 @@ export class CartRepository {
   }
 
   // Remove all items from cart (Clear cart)
-  async clearItems(cartId: string): Promise<void> {
-    await this.db
-      .deleteFrom("cart_items")
-      .where("cart_id", "=", cartId)
-      .execute();
+  async clearItems(cartId: string, trx?: DbOrTrx): Promise<void> {
+    const db = trx ?? this.db;
+    await db.deleteFrom("cart_items").where("cart_id", "=", cartId).execute();
   }
 
   // Find item by id

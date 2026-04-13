@@ -43,8 +43,29 @@ export class CartService {
           `Already in cart: ${existingItem?.quantity ?? 0}, Requested: ${dto.quantity}`,
       );
 
-    // 4. Add to cart (upsert)
-    await this.cartRepository.upsertItem(cart.id, dto.variantId, dto.quantity);
+    // 4. Reserve + upsert - rollback when error
+    try {
+      await this.cartRepository.client.transaction().execute(async (trx) => {
+        await this.inventoryRepository.reserve(
+          dto.variantId,
+          dto.quantity,
+          trx,
+        );
+        await this.cartRepository.upsertItem(
+          cart.id,
+          dto.variantId,
+          dto.quantity,
+          trx,
+        );
+      });
+    } catch (error: any) {
+      if (error.message === "INSUFFICIENT_STOCK")
+        throw new BadRequestError(
+          `Stock was just taken by another order. Available: ${inventory.available}`,
+        );
+
+      throw error;
+    }
 
     // 5. Return the newest cart
     return (await this.cartRepository.findActiveByUserId(userId))!;
@@ -63,25 +84,54 @@ export class CartService {
     if (!item)
       throw new NotFoundError(`Cart item with id "${cartItemId}" not found`);
 
-    // Check inventory with new quantity
-    const inventory = await this.inventoryRepository.findByVariantId(
-      item.variantId,
-    );
-    if (!inventory || inventory.available < dto.quantity)
-      throw new BadRequestError(
-        `Not enough stock. Available: ${inventory?.available ?? 0}`,
-      );
+    const diff = dto.quantity - item.quantity;
+    // If nothing change
+    if (diff === 0) return cart;
 
-    await this.cartRepository.updateItemQuantity(
-      cart.id,
-      cartItemId,
-      dto.quantity,
-    );
+    if (diff > 0) {
+      const inventory = await this.inventoryRepository.findByVariantId(
+        item.variantId,
+      );
+      if (!inventory || inventory.available < diff)
+        throw new BadRequestError(
+          `Not enough stock. Available: ${inventory?.available ?? 0}, Need more: ${diff}`,
+        );
+    }
+
+    try {
+      await this.cartRepository.client.transaction().execute(async (trx) => {
+        if (diff > 0) {
+          await this.inventoryRepository.reserve(item.variantId, diff, trx);
+        } else {
+          await this.inventoryRepository.release(
+            item.variantId,
+            Math.abs(diff),
+            trx,
+          );
+        }
+        await this.cartRepository.updateItemQuantity(
+          cart.id,
+          cartItemId,
+          dto.quantity,
+          trx,
+        );
+      });
+    } catch (error: any) {
+      if (error.message === `INSUFFICIENT_STOCK`)
+        throw new BadRequestError(
+          `Stock was just taken by another order. Please try a smaller quantity`,
+        );
+
+      if (error.message === `RELEASE_FAILED`)
+        throw new BadRequestError(`Release failed: reserved stock mismatch`);
+
+      throw error;
+    }
 
     return (await this.cartRepository.findActiveByUserId(userId))!;
   }
 
-  // Remove 1 item from cart
+  // Remove 1 item from cart -> Release inventory
   async removeItem(userId: string, cartItemId: string): Promise<CartEntity> {
     const cart = await this.cartRepository.findOrCreate(userId);
 
@@ -89,15 +139,50 @@ export class CartService {
     if (!item)
       throw new NotFoundError(`Cart item with id "${cartItemId}" not found`);
 
-    await this.cartRepository.removeItem(cart.id, cartItemId);
+    // Remove item + release
+    try {
+      await this.cartRepository.client.transaction().execute(async (trx) => {
+        await this.cartRepository.removeItem(cart.id, cartItemId, trx);
+        await this.inventoryRepository.release(
+          item.variantId,
+          item.quantity,
+          trx,
+        );
+      });
+    } catch (error: any) {
+      if (error.message === `RELEASE_FAILED`)
+        throw new BadRequestError(`Release failed: reserved stock mismatch`);
+
+      throw error;
+    }
 
     return (await this.cartRepository.findActiveByUserId(userId))!;
   }
 
-  //Remove all items from cart (Clear cart)
+  //Remove all items from cart (Clear cart) -> Release all
   async clearCart(userId: string): Promise<CartEntity> {
     const cart = await this.cartRepository.findOrCreate(userId);
-    await this.cartRepository.clearItems(cart.id);
+    if (cart.items.length === 0) return cart;
+
+    // Remove all items + release all reserved
+    try {
+      await this.cartRepository.client.transaction().execute(async (trx) => {
+        for (const item of cart.items) {
+          await this.inventoryRepository.release(
+            item.variantId,
+            item.quantity,
+            trx,
+          );
+        }
+        await this.cartRepository.clearItems(cart.id, trx);
+      });
+    } catch (error: any) {
+      if (error.message === `RELEASE_FAILED`)
+        throw new BadRequestError(`Release failed: reserved stock mismatch`);
+
+      throw error;
+    }
+
     return (await this.cartRepository.findActiveByUserId(userId))!;
   }
 }
