@@ -11,6 +11,7 @@ import { createProductRouter } from "./modules/product/product.route";
 import { createUploadRouter } from "./modules/upload/upload.route";
 import { createInventoryRouter } from "./modules/inventory/inventory.route";
 import { createCartRouter } from "./modules/cart/cart.route";
+import { createOrderRouter } from "./modules/order/order.route";
 
 const app: Application = express();
 
@@ -32,6 +33,7 @@ const productController = container.resolve("productController");
 const uploadController = container.resolve("uploadController");
 const inventoryController = container.resolve("inventoryController");
 const cartController = container.resolve("cartController");
+const orderController = container.resolve("orderController");
 
 // Initialize uploads/ directory when server starts
 const uploadService = container.resolve("uploadService");
@@ -44,6 +46,7 @@ app.use("/api/products", createProductRouter(productController));
 app.use("/api/upload", createUploadRouter(uploadController));
 app.use("/api/inventory", createInventoryRouter(inventoryController));
 app.use("/api/cart", createCartRouter(cartController));
+app.use("/api/orders", createOrderRouter(orderController));
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "OK", message: "App is running!" });

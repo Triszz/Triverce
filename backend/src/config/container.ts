@@ -21,6 +21,9 @@ import { InventoryController } from "../modules/inventory/inventory.controller";
 import { CartRepository } from "../modules/cart/cart.repository";
 import { CartService } from "../modules/cart/cart.service";
 import { CartController } from "../modules/cart/cart.controller";
+import { OrderRepository } from "../modules/order/order.repository";
+import { OrderService } from "../modules/order/order.service";
+import { OrderController } from "../modules/order/order.controller";
 
 // Định nghĩa interface cho container
 export interface ICradle {
@@ -50,6 +53,10 @@ export interface ICradle {
   cartRepository: CartRepository;
   cartService: CartService;
   cartController: CartController;
+  // Order
+  orderRepository: OrderRepository;
+  orderService: OrderService;
+  orderController: OrderController;
 }
 
 const container = createContainer<ICradle>({
@@ -83,6 +90,10 @@ container.register({
   cartRepository: asClass(CartRepository).scoped(),
   cartService: asClass(CartService).scoped(),
   cartController: asClass(CartController).scoped(),
+  // Order
+  orderRepository: asClass(OrderRepository).scoped(),
+  orderService: asClass(OrderService).scoped(),
+  orderController: asClass(OrderController).scoped(),
 });
 
 export { container };

@@ -19,6 +19,7 @@ export class OrderService {
     private cartRepository: CartRepository,
   ) {}
 
+  // Checkout
   async checkout(
     customerId: string,
     dto: CreateOrderDto,
@@ -106,7 +107,7 @@ export class OrderService {
     return order;
   }
 
-  // Update status
+  // Update order status
   async updateStatus(
     orderId: string,
     dto: UpdateOrderStatusDto,
@@ -242,8 +243,7 @@ export class OrderService {
 
       if (inv.quantity < item.quantity)
         throw new BadRequestError(
-          `Stock error for "${item.variantSku}". ` +
-            `Physical quantity: ${inv.quantity}, Requested: ${item.quantity}`,
+          `Not enough stock for "${item.variantSku}". `,
         );
     }
 
