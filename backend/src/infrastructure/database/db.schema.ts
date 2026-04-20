@@ -110,6 +110,7 @@ export interface OrdersTable {
   cancelled_reason: string | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+  payment_id: string | null;
 }
 
 export interface OrderItemsTable {
@@ -132,19 +133,52 @@ export interface OrderStatusLogsTable {
   note: string | null;
   created_at: Generated<Date>;
 }
+
+export interface PaymentsTable {
+  id: Generated<string>;
+  customer_id: string;
+  amount: ColumnType<number, string | number, string | number>;
+  currency: Generated<string>;
+  status: Generated<
+    "pending" | "processing" | "paid" | "failed" | "cancelled" | "refunded"
+  >;
+  gateway: "momo" | "stripe" | "vnpay" | "cod";
+  gateway_ref: string | null;
+  gateway_data: unknown | null;
+  idempotency_key: string;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export interface WebhookEventsTable {
+  id: string;
+  gateway: string;
+  event_type: string;
+  payload: unknown;
+  processed_at: Generated<Date>;
+}
 export interface DatabaseSchema {
+  // User table
   users: UsersTable;
+  // Category table
   categories: CategoriesTable;
+  // Product table
   products: ProductsTable;
   product_attributes: ProductAttributesTable;
   product_variants: ProductVariantsTable;
   variant_attribute_values: VariantAttributeValuesTable;
+  // Inventory table
   inventory: InventoryTable;
+  // Cart table
   carts: CartsTable;
   cart_items: CartItemsTable;
+  // Order table
   orders: OrdersTable;
   order_items: OrderItemsTable;
   order_status_logs: OrderStatusLogsTable;
+  // Payment table
+  payments: PaymentsTable;
+  webhook_events: WebhookEventsTable;
 }
 
 // User table
@@ -211,3 +245,12 @@ export type NewOrderItem = Insertable<OrderItemsTable>;
 // Order status log table
 export type OrderStatusLogRow = Selectable<OrderStatusLogsTable>;
 export type NewOrderStatusLog = Insertable<OrderStatusLogsTable>;
+
+// Payment table
+export type PaymentRow = Selectable<PaymentsTable>;
+export type NewPayment = Insertable<PaymentsTable>;
+export type PaymentUpdate = Updateable<PaymentsTable>;
+
+// Webhook events table
+export type WebhookEventRow = Selectable<WebhookEventsTable>;
+export type NewWebhookEvent = Insertable<WebhookEventsTable>;
