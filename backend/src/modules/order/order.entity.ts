@@ -7,14 +7,16 @@ export type OrderStatus =
   | "confirmed"
   | "shipping"
   | "delivered"
-  | "cancelled";
+  | "cancelled"
+  | "failed";
 
 export const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ["confirmed", "cancelled"],
+  pending: ["confirmed", "cancelled", "failed"],
   confirmed: ["shipping", "cancelled"],
   shipping: ["delivered"],
   delivered: [],
   cancelled: [],
+  failed: [],
 };
 
 export class OrderEntity {

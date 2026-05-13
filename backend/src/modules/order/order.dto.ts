@@ -8,6 +8,9 @@ export const CreateOrderSchema = z.object({
     .regex(/^[0-9]{9,11}$/, "Invalid phone number"),
   shippingAddress: z.string().trim().min(10, "Address is too short"),
   note: z.string().trim().max(500).optional(),
+  gateway: z.enum(["momo", "stripe", "vnpay", "cod"]).default("momo"),
+  returnUrl: z.url(),
+  cancelUrl: z.url(),
 });
 
 export const UpdateOrderStatusSchema = z.object({

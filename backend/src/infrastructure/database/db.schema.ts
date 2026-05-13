@@ -100,7 +100,7 @@ export interface OrdersTable {
   customer_id: string;
   seller_id: string;
   status: Generated<
-    "pending" | "confirmed" | "shipping" | "delivered" | "cancelled"
+    "pending" | "confirmed" | "shipping" | "delivered" | "cancelled" | "failed"
   >;
   total_amount: ColumnType<number, string | number, string | number>;
   shipping_name: string;

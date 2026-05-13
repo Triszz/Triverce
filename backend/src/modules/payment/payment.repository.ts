@@ -5,6 +5,7 @@ import {
   PaymentRow,
 } from "../../infrastructure/database/db.schema";
 import { PaymentEntity, PaymentStatus, PaymentGateway } from "./payment.entity";
+import { BadRequestError } from "../../core/errors/AppError";
 
 type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
 
@@ -35,8 +36,20 @@ export class PaymentRepository {
         gateway: data.gateway,
         idempotency_key: data.idempotencyKey,
       })
-      .returning("id")
+      .onConflict((oc) =>
+        oc.column("idempotency_key").doUpdateSet({
+          updated_at: new Date(),
+        }),
+      )
+      .returning(["id", "status"])
       .executeTakeFirstOrThrow();
+
+    if (row.status !== "pending") {
+      throw new BadRequestError(
+        `Cannot reuse a payment that is already ${row.status}`,
+      );
+    }
+
     return row.id;
   }
 
@@ -133,7 +146,7 @@ export class PaymentRepository {
     return result !== undefined;
   }
   // Helpers
-  private async loadOrderIds(
+  public async loadOrderIds(
     paymentId: string,
     db: DbOrTrx = this.client,
   ): Promise<string[]> {

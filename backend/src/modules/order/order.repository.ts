@@ -3,6 +3,7 @@ import { DatabaseSchema } from "../../infrastructure/database/db.schema";
 import { OrderEntity } from "./order.entity";
 import { OrderStatusLogEntity } from "./order-status-log.entity";
 import { OrderItemEntity } from "./order-item.entity";
+import { OrderStatus } from "./order.entity";
 
 type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
 
@@ -47,6 +48,7 @@ export class OrderRepository {
       shippingPhone: string;
       shippingAddress: string;
       note?: string;
+      paymentId: string;
     },
     trx: DbOrTrx,
   ): Promise<string> {
@@ -60,6 +62,8 @@ export class OrderRepository {
         shipping_phone: data.shippingPhone,
         shipping_address: data.shippingAddress,
         note: data.note ?? null,
+        payment_id: data.paymentId,
+        status: "pending",
       })
       .returning("id")
       .executeTakeFirstOrThrow();
@@ -98,8 +102,8 @@ export class OrderRepository {
   async createStatusLog(
     data: {
       orderId: string;
-      fromStatus: string | null;
-      toStatus: string;
+      fromStatus: OrderStatus | null;
+      toStatus: OrderStatus;
       changedBy: string;
       note?: string;
     },
@@ -209,7 +213,7 @@ export class OrderRepository {
   // Update status
   async updateStatus(
     orderId: string,
-    status: "pending" | "confirmed" | "shipping" | "delivered" | "cancelled",
+    status: OrderStatus,
     cancelledReason?: string,
     trx?: DbOrTrx,
   ): Promise<void> {

@@ -12,19 +12,23 @@ import {
   ForbiddenError,
 } from "../../core/errors/AppError";
 import { CartRepository } from "../cart/cart.repository";
+import { PaymentRepository } from "../payment/payment.repository";
+import { IPaymentGateway } from "../payment/payment.interface";
 
 export class OrderService {
   constructor(
     private orderRepository: OrderRepository,
     private cartRepository: CartRepository,
+    private paymentRepository: PaymentRepository,
+    private gateway: IPaymentGateway,
   ) {}
 
   // Checkout
   async checkout(
     customerId: string,
     dto: CreateOrderDto,
-  ): Promise<OrderEntity[]> {
-    // 1. Get cart + validate
+  ): Promise<{ orders: OrderEntity[]; paymentId: string; paymentUrl: string }> {
+    // 1. Validate cart
     const cart = await this.cartRepository.findActiveByUserId(customerId);
     if (!cart || cart.items.length === 0)
       throw new BadRequestError("Cart is empty");
@@ -32,31 +36,47 @@ export class OrderService {
     // 2. Group items by sellerId
     const sellerGroups = new Map<string, typeof cart.items>();
     for (const item of cart.items) {
-      // Get sellerId from product via variant
       const sellerId = await this.getSellerIdByVariantId(item.variantId);
-
-      if (!sellerGroups.has(sellerId)) {
-        sellerGroups.set(sellerId, []);
-      }
+      if (!sellerGroups.has(sellerId)) sellerGroups.set(sellerId, []);
       sellerGroups.get(sellerId)!.push(item);
     }
 
+    // 3. Calculate the total amount for the checkout
+    const totalAmount = cart.items.reduce(
+      (sum, item) => sum + (item.variantPrice ?? 0) * item.quantity,
+      0,
+    );
+
     const createdOrders: OrderEntity[] = [];
+    let paymentId!: string;
 
     await this.orderRepository.client.transaction().execute(async (trx) => {
-      // 3. Create a separate order for each seller - one transaction per seller
+      // 4. Create a payment record beforehand (status: pending)
+      paymentId = await this.paymentRepository.create(
+        {
+          customerId,
+          amount: totalAmount,
+          currency: "VND",
+          gateway: dto.gateway ?? "momo",
+          idempotencyKey: `checkout_cart_${cart.id}`, // unique per checkout attempt
+        },
+        trx,
+      );
+
+      // 5. Create orders for each seller
       for (const [sellerId, items] of sellerGroups) {
         const order = await this.createOrderForSeller(
           customerId,
           sellerId,
           items,
           dto,
+          paymentId,
           trx,
         );
         createdOrders.push(order);
       }
 
-      // 4. Clear the cart after all orders have been successfully created
+      // 7. Delete cart
       await this.cartRepository.clearItems(cart.id, trx);
       await trx
         .updateTable("carts")
@@ -65,7 +85,38 @@ export class OrderService {
         .execute();
     });
 
-    return createdOrders;
+    // 8. Call gateway AFTER transaction commit (avoid rollback delete payment)
+    let paymentUrl = dto.returnUrl; // Default returns a success page (Used for COD)
+
+    if (dto.gateway !== "cod") {
+      try {
+        const session = await this.gateway.createSession({
+          paymentId,
+          amount: totalAmount,
+          currency: "VND",
+          returnUrl: dto.returnUrl,
+          cancelUrl: dto.cancelUrl,
+          description: `Pay for ${createdOrders.length} orders`,
+        });
+
+        paymentUrl = session.paymentUrl;
+
+        // 9. Save gatewayRef to payment
+        await this.paymentRepository.setGatewayRef(
+          paymentId,
+          session.gatewayRef,
+          this.paymentRepository.client,
+        );
+      } catch (error) {
+        console.error("Payment gateway call error:", error);
+
+        throw new BadRequestError(
+          "Order created successfully, but there's a MoMo connection error. Please try paying again later.",
+        );
+      }
+    }
+
+    return { orders: createdOrders, paymentId, paymentUrl };
   }
 
   // Get user orders
@@ -224,6 +275,7 @@ export class OrderService {
       variantSku?: string;
     }[],
     dto: CreateOrderDto,
+    paymentId: string,
     trx: any,
   ): Promise<OrderEntity> {
     // 1. SELECT FOR UPDATE - lock inventory rows
@@ -263,6 +315,7 @@ export class OrderService {
         shippingPhone: dto.shippingPhone,
         shippingAddress: dto.shippingAddress,
         note: dto.note,
+        paymentId,
       },
       trx,
     );

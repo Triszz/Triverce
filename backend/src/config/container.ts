@@ -24,6 +24,18 @@ import { CartController } from "../modules/cart/cart.controller";
 import { OrderRepository } from "../modules/order/order.repository";
 import { OrderService } from "../modules/order/order.service";
 import { OrderController } from "../modules/order/order.controller";
+import { PaymentRepository } from "../modules/payment/payment.repository";
+import { PaymentService } from "../modules/payment/payment.service";
+import { PaymentController } from "../modules/payment/payment.controller";
+import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
+
+const momoConfig = {
+  partnerCode: process.env.MOMO_PARTNER_CODE as string,
+  accessKey: process.env.MOMO_ACCESS_KEY as string,
+  secretKey: process.env.MOMO_SECRET_KEY as string,
+  apiUrl: process.env.MOMO_API_URL as string,
+  ipnUrl: process.env.MOMO_IPN_URL as string,
+};
 
 // Định nghĩa interface cho container
 export interface ICradle {
@@ -57,6 +69,10 @@ export interface ICradle {
   orderRepository: OrderRepository;
   orderService: OrderService;
   orderController: OrderController;
+  // Payment
+  paymentRepository: PaymentRepository;
+  paymentService: PaymentService;
+  paymentController: PaymentController;
 }
 
 const container = createContainer<ICradle>({
@@ -94,6 +110,11 @@ container.register({
   orderRepository: asClass(OrderRepository).scoped(),
   orderService: asClass(OrderService).scoped(),
   orderController: asClass(OrderController).scoped(),
+  // Payment
+  paymentRepository: asClass(PaymentRepository).scoped(),
+  paymentService: asClass(PaymentService).scoped(),
+  paymentController: asClass(PaymentController).scoped(),
+  gateway: asValue(new MoMoAdapter(momoConfig)),
 });
 
 export { container };
