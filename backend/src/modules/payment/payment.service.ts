@@ -23,7 +23,8 @@ export class PaymentService {
     dto: { returnUrl: string; cancelUrl: string },
   ): Promise<{ paymentUrl: string }> {
     const payment = await this.paymentRepository.findById(paymentId);
-    if (!payment) throw new NotFoundError("Payment not found");
+    if (!payment)
+      throw new NotFoundError(`Payment with id "${paymentId}"not found`);
 
     if (payment.customerId !== customerId)
       throw new ForbiddenError("Access denied");
@@ -67,6 +68,10 @@ export class PaymentService {
     if (payment.customerId !== customerId)
       throw new ForbiddenError("Access denied");
 
+    if (payment.gateway === "cod") {
+      return payment.toPublic();
+    }
+
     // Only contact MoMo to check if your database is still pending
     if (payment.status === "pending" && payment.gatewayRef) {
       const statusResult = await this.gateway.queryTransaction(
@@ -92,7 +97,42 @@ export class PaymentService {
       }
     }
 
-    return payment;
+    return payment.toPublic();
+  }
+
+  // Seller confirm COD
+  async confirmCOD(paymentId: string, sellerId: string): Promise<void> {
+    const payment = await this.paymentRepository.findById(paymentId);
+    if (!payment) throw new NotFoundError("Payment not found");
+
+    if (payment.gateway !== "cod")
+      throw new BadRequestError("Not a COD payment");
+    if (payment.status !== "pending") return; // If payment has already been made, ignore it
+
+    const orderIds = await this.paymentRepository.loadOrderIds(paymentId);
+
+    // Take the first order (because COD now only allows 1 order/1 payment)
+    const order = await this.orderRepository.findById(orderIds[0]);
+
+    // Ownership verification: Sellers are only allowed to confirm payment for the orders they themselves deliver
+    if (order?.sellerId !== sellerId) {
+      throw new ForbiddenError(
+        "You don't have permission to confirm this payment",
+      );
+    }
+
+    await this.paymentRepository.client.transaction().execute(async (trx) => {
+      // 1. Update Payment to 'paid'
+      await this.paymentRepository.updateStatus(
+        paymentId,
+        "paid",
+        { gatewayData: { confirmedBy: sellerId, confirmedAt: new Date() } },
+        trx,
+      );
+
+      // 2. Update order status from 'delivered' to 'paid'
+      await this.updateRelatedOrders(paymentId, "paid", trx);
+    });
   }
 
   private async updateRelatedOrders(
@@ -129,7 +169,7 @@ export class PaymentService {
           orderId,
           fromStatus: "pending",
           toStatus: newStatus,
-          changedBy: "system",
+          changedBy: null,
           note: `Payment ${paymentStatus}`,
         },
         trx,

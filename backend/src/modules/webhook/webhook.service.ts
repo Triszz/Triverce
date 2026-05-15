@@ -45,7 +45,7 @@ export class WebhookService {
       // 5. Find payment
       const payment = await this.paymentRepository.findById(paymentId, trx);
       if (!payment)
-        throw new BadRequestError(`Payment with id ${paymentId} not found`);
+        throw new BadRequestError(`Payment with id "${paymentId}" not found`);
 
       // 6. Validate transition
       if (!payment.canTransitionTo(status)) {

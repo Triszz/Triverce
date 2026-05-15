@@ -15,5 +15,11 @@ export const createPaymentRouter = (controller: PaymentController) => {
   );
   router.get("/:paymentId/verify", requireRole("customer"), controller.verify);
 
+  router.post(
+    "/:paymentId/confirm-cod",
+    requireRole("seller"),
+    controller.confirmCOD,
+  );
+
   return router;
 };

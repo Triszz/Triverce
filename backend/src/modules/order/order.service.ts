@@ -27,13 +27,19 @@ export class OrderService {
   async checkout(
     customerId: string,
     dto: CreateOrderDto,
-  ): Promise<{ orders: OrderEntity[]; paymentId: string; paymentUrl: string }> {
-    // 1. Validate cart
+  ): Promise<{
+    orders: OrderEntity[];
+    paymentMethod: string;
+    paymentId?: string;
+    paymentIds?: string[];
+    paymentUrl: string;
+  }> {
+    // Validate cart
     const cart = await this.cartRepository.findActiveByUserId(customerId);
     if (!cart || cart.items.length === 0)
       throw new BadRequestError("Cart is empty");
 
-    // 2. Group items by sellerId
+    // Group items by sellerId
     const sellerGroups = new Map<string, typeof cart.items>();
     for (const item of cart.items) {
       const sellerId = await this.getSellerIdByVariantId(item.variantId);
@@ -41,42 +47,78 @@ export class OrderService {
       sellerGroups.get(sellerId)!.push(item);
     }
 
-    // 3. Calculate the total amount for the checkout
+    // Calculate the total amount for the checkout
     const totalAmount = cart.items.reduce(
       (sum, item) => sum + (item.variantPrice ?? 0) * item.quantity,
       0,
     );
 
     const createdOrders: OrderEntity[] = [];
-    let paymentId!: string;
+
+    let singlePaymentId: string | undefined;
+    const codPaymentIds: string[] = [];
 
     await this.orderRepository.client.transaction().execute(async (trx) => {
-      // 4. Create a payment record beforehand (status: pending)
-      paymentId = await this.paymentRepository.create(
-        {
-          customerId,
-          amount: totalAmount,
-          currency: "VND",
-          gateway: dto.gateway ?? "momo",
-          idempotencyKey: `checkout_cart_${cart.id}`, // unique per checkout attempt
-        },
-        trx,
-      );
+      // COD logic
+      if (dto.gateway === "cod") {
+        for (const [sellerId, items] of sellerGroups) {
+          // Calculate the total amount for this Seller
+          const orderTotal = items.reduce(
+            (sum, it) => sum + (it.variantPrice ?? 0) * it.quantity,
+            0,
+          );
 
-      // 5. Create orders for each seller
-      for (const [sellerId, items] of sellerGroups) {
-        const order = await this.createOrderForSeller(
-          customerId,
-          sellerId,
-          items,
-          dto,
-          paymentId,
+          // Create a separate payment
+          const paymentId = await this.paymentRepository.create(
+            {
+              customerId,
+              amount: orderTotal,
+              currency: "VND",
+              gateway: "cod",
+              idempotencyKey: `checkout_cod_${cart.id}_${sellerId}`,
+            },
+            trx,
+          );
+          codPaymentIds.push(paymentId);
+
+          // Create an Order and assign it to the Payment you just created
+          const order = await this.createOrderForSeller(
+            customerId,
+            sellerId,
+            items,
+            dto,
+            paymentId,
+            trx,
+          );
+          createdOrders.push(order);
+        }
+      } else {
+        // MoMo, prepay
+        singlePaymentId = await this.paymentRepository.create(
+          {
+            customerId,
+            amount: totalAmount,
+            currency: "VND",
+            gateway: dto.gateway ?? "momo",
+            idempotencyKey: `checkout_cart_${cart.id}`,
+          },
           trx,
         );
-        createdOrders.push(order);
+
+        for (const [sellerId, items] of sellerGroups) {
+          const order = await this.createOrderForSeller(
+            customerId,
+            sellerId,
+            items,
+            dto,
+            singlePaymentId,
+            trx,
+          );
+          createdOrders.push(order);
+        }
       }
 
-      // 7. Delete cart
+      // Delete cart
       await this.cartRepository.clearItems(cart.id, trx);
       await trx
         .updateTable("carts")
@@ -85,38 +127,50 @@ export class OrderService {
         .execute();
     });
 
-    // 8. Call gateway AFTER transaction commit (avoid rollback delete payment)
-    let paymentUrl = dto.returnUrl; // Default returns a success page (Used for COD)
+    let paymentUrl = dto.returnUrl;
 
-    if (dto.gateway !== "cod") {
-      try {
-        const session = await this.gateway.createSession({
-          paymentId,
-          amount: totalAmount,
-          currency: "VND",
-          returnUrl: dto.returnUrl,
-          cancelUrl: dto.cancelUrl,
-          description: `Pay for ${createdOrders.length} orders`,
-        });
-
-        paymentUrl = session.paymentUrl;
-
-        // 9. Save gatewayRef to payment
-        await this.paymentRepository.setGatewayRef(
-          paymentId,
-          session.gatewayRef,
-          this.paymentRepository.client,
-        );
-      } catch (error) {
-        console.error("Payment gateway call error:", error);
-
-        throw new BadRequestError(
-          "Order created successfully, but there's a MoMo connection error. Please try paying again later.",
-        );
-      }
+    if (dto.gateway === "cod") {
+      // If it's a COD (Cash on Delivery) payment, return the list of payment IDs; no need to call MoMo
+      return {
+        orders: createdOrders,
+        paymentMethod: "cod",
+        paymentIds: codPaymentIds,
+        paymentUrl,
+      };
     }
 
-    return { orders: createdOrders, paymentId, paymentUrl };
+    // If using MoMo, call the API to create a payment link
+    try {
+      const session = await this.gateway.createSession({
+        paymentId: singlePaymentId!, // At this point, singlePaymentId definitely has value
+        amount: totalAmount,
+        currency: "VND",
+        returnUrl: dto.returnUrl,
+        cancelUrl: dto.cancelUrl,
+        description: `Pay for ${createdOrders.length} orders`,
+      });
+
+      paymentUrl = session.paymentUrl;
+
+      await this.paymentRepository.setGatewayRef(
+        singlePaymentId!,
+        session.gatewayRef,
+        this.paymentRepository.client,
+      );
+    } catch (error) {
+      console.error("Payment gateway call error:", error);
+      throw new BadRequestError(
+        "Order created successfully, but there's a MoMo connection error. Please try paying again later.",
+      );
+    }
+
+    // Return for MoMo
+    return {
+      orders: createdOrders,
+      paymentMethod: dto.gateway ?? "momo",
+      paymentId: singlePaymentId,
+      paymentUrl,
+    };
   }
 
   // Get user orders

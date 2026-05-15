@@ -20,7 +20,9 @@ export class OrderController {
         success: true,
         data: {
           orders: checkoutResult.orders.map((o) => o.toPublic()),
+          paymentMethod: checkoutResult.paymentMethod,
           paymentId: checkoutResult.paymentId,
+          paymentIds: checkoutResult.paymentIds,
           paymentUrl: checkoutResult.paymentUrl,
         },
       });
