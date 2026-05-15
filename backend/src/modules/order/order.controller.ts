@@ -12,13 +12,17 @@ export class OrderController {
   // Checkout
   checkout = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const orders = await this.orderService.checkout(
+      const checkoutResult = await this.orderService.checkout(
         req.user!.userId,
         req.body as CreateOrderDto,
       );
       res.status(201).json({
         success: true,
-        data: orders.map((o) => o.toPublic()),
+        data: {
+          orders: checkoutResult.orders.map((o) => o.toPublic()),
+          paymentId: checkoutResult.paymentId,
+          paymentUrl: checkoutResult.paymentUrl,
+        },
       });
     } catch (error) {
       next(error);

@@ -104,7 +104,7 @@ export class OrderRepository {
       orderId: string;
       fromStatus: OrderStatus | null;
       toStatus: OrderStatus;
-      changedBy: string;
+      changedBy: string | null;
       note?: string;
     },
     trx: DbOrTrx,

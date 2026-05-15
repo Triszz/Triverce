@@ -27,6 +27,10 @@ import { OrderController } from "../modules/order/order.controller";
 import { PaymentRepository } from "../modules/payment/payment.repository";
 import { PaymentService } from "../modules/payment/payment.service";
 import { PaymentController } from "../modules/payment/payment.controller";
+import { MockPaymentAdapter } from "../modules/payment/adapters/mock.adapter";
+import { IPaymentGateway } from "../modules/payment/payment.interface";
+import { WebhookService } from "../modules/webhook/webhook.service";
+import { WebhookController } from "../modules/webhook/webhook.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
 
 const momoConfig = {
@@ -73,6 +77,10 @@ export interface ICradle {
   paymentRepository: PaymentRepository;
   paymentService: PaymentService;
   paymentController: PaymentController;
+  gateway: IPaymentGateway;
+  // Webhook
+  webhookService: WebhookService;
+  webhookController: WebhookController;
 }
 
 const container = createContainer<ICradle>({
@@ -114,7 +122,10 @@ container.register({
   paymentRepository: asClass(PaymentRepository).scoped(),
   paymentService: asClass(PaymentService).scoped(),
   paymentController: asClass(PaymentController).scoped(),
-  gateway: asValue(new MoMoAdapter(momoConfig)),
+  gateway: asValue(new MockPaymentAdapter()), // Production: change new MockPaymentAdapter() to new MoMoAdapter(momoConfig)
+  // Webhook
+  webhookService: asClass(WebhookService).scoped(),
+  webhookController: asClass(WebhookController).scoped(),
 });
 
 export { container };
