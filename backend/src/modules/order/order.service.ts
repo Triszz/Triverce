@@ -283,6 +283,68 @@ export class OrderService {
       );
 
     await this.orderRepository.client.transaction().execute(async (trx) => {
+      if (order.paymentId) {
+        // 1. Get current payment information
+        const payment = await this.paymentRepository.findById(
+          order.paymentId,
+          trx,
+        );
+
+        if (payment && payment.status === "paid") {
+          // 2. Online payment (MoMo, etc.)
+          if (payment.gateway !== "cod" && payment.gatewayRef) {
+            try {
+              const refundResult = await this.gateway.refundTransaction({
+                gatewayRef: payment.gatewayRef,
+                amount: order.totalAmount,
+                reason: dto.reason || "Customer requested cancellation",
+              });
+
+              // Update the Payment status to refunded
+              await this.paymentRepository.updateStatus(
+                payment.id,
+                "refunded",
+                {
+                  gatewayData: {
+                    ...((payment.gatewayData as Record<string, unknown>) || {}),
+                    refundRef: refundResult.refundRef,
+                    refundedAt: new Date(),
+                  },
+                },
+                trx,
+              );
+            } catch (error) {
+              console.error("[Refund Error]", error);
+              throw new BadRequestError(
+                "Failed to process refund with Payment Gateway. Order cancellation aborted.",
+              );
+            }
+          }
+          // 3. Cash on Delivery (COD) payment
+          else if (payment.gateway === "cod") {
+            await this.paymentRepository.updateStatus(
+              payment.id,
+              "refunded",
+              {
+                gatewayData: {
+                  ...((payment.gatewayData as Record<string, unknown>) || {}),
+                  refundedBy: user.userId,
+                  refundMethod: "cash",
+                  refundedAt: new Date(),
+                },
+              },
+              trx,
+            );
+          }
+        } else if (payment && payment.status === "pending") {
+          await this.paymentRepository.updateStatus(
+            payment.id,
+            "cancelled",
+            {},
+            trx,
+          );
+        }
+      }
       // Return back for inventory
       for (const item of order.items) {
         await trx
