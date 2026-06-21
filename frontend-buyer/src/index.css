@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #002b5b;
+  --color-brand-light: #1d4ed8;
+  --color-surface: #ffffff;
+  --color-background: #f8fafc;
+
+  --font-sans: "DM Sans", "Inter", system-ui, sans-serif;
+  --font-heading: "DM Sans", "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-600 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-slate-900 font-semibold;
+    font-family: var(--font-heading);
+  }
+
+  a {
+    @apply transition-colors duration-150;
+  }
+
+  input,
+  textarea,
+  select {
+    @apply rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400
+           focus:border-[#002b5b] focus:outline-none focus:ring-2 focus:ring-[#002b5b]/20
+           transition-colors duration-150;
+  }
+
+  ::selection {
+    background-color: #002b5b;
+    color: #ffffff;
+  }
+}
+
+@layer utilities {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white
+           hover:bg-[#001f3f] active:bg-[#001540] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700
+           hover:bg-slate-50 hover:border-slate-300 active:bg-slate-100 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-slate-600
+           hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors duration-150;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-slate-100 shadow-sm;
+  }
+
+  .input-error {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+  }
+}

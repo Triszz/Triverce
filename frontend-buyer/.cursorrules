@@ -1,0 +1,173 @@
+# Triverce Buyer Frontend — .cursorrules
+
+## Scope
+
+**This codebase is STRICTLY the Buyer-facing (B2C) Frontend for Triverce.**
+It MUST NOT contain:
+- Seller/Dashboard routes or pages
+- Vendor registration flows
+- Admin panel logic
+- Any route prefixed with `/seller`, `/vendor`, `/admin`, or `/dashboard`
+
+All seller-side and admin-side features live in separate repositories.
+
+---
+
+## Tech Stack
+
+| Concern | Technology |
+|---|---|
+| Framework | React 19 |
+| Bundler | Vite |
+| Styling | Tailwind CSS v4 (`@tailwindcss/vite` plugin) |
+| Routing | React Router v7 |
+| State Management | Zustand |
+| HTTP Client | Axios |
+| Language | TypeScript |
+
+**No `tailwind.config.js` or `postcss.config.js` — Tailwind v4 is configured via `@theme` in `src/index.css`.**
+
+---
+
+## Business Model
+
+- Triverce is a **Multi-vendor E-commerce Platform**.
+- Every API response that includes product/order/cart data **MUST** carry `sellerId` and `sellerName`.
+- **Cart and Order items are ALWAYS grouped by Seller.**
+- Data models, interfaces, and TypeScript types must always reflect the multi-vendor nature.
+
+---
+
+## Design System
+
+### Color Palette
+
+| Token | Value | Usage |
+|---|---|---|
+| Primary | `#002b5b` (blue-900) | Brand color, CTAs, key elements |
+| Background | `bg-slate-50` | Page background |
+| Surface | `#ffffff` | Cards, inputs, modals |
+| Text Primary | `#0f172a` (slate-900) | Headings, primary text |
+| Text Secondary | `#64748b` (slate-500) | Descriptions, metadata |
+| Border | `#e2e8f0` (slate-200) | Dividers, input borders |
+| Accent | `#1d4ed8` (blue-700) | Links, hover states |
+
+### Inputs
+- **Boxed inputs only** — all `<input>` elements must have rounded borders (Tailwind: `rounded-md` or `rounded-lg`).
+- **NO underlined inputs** anywhere in the app.
+
+### Typography
+- Font: System font stack or a premium Google Font (e.g., Inter, DM Sans)
+- Headings: bold, slate-900
+- Body: slate-600, leading-relaxed
+
+### Aesthetic
+- Premium, clean, minimalist
+- Generous whitespace
+- Subtle shadows (`shadow-sm` / `shadow-md`)
+- Rounded corners (`rounded-lg` for cards, `rounded-xl` for large containers)
+
+---
+
+## Architecture Principles
+
+### SOLID — Applied Strictly
+
+- **S**ingle Responsibility: each component/page does one thing. No God components.
+- **O**pen/Closed: extend behavior via composition and props, not by modifying existing components.
+- **L**iskov Substitution: all layout wrappers accept the same children contract.
+- **I**nterface Segregation: custom hooks expose minimal, focused APIs.
+- **D**ependency Inversion: services abstract Axios; stores abstract state; components are pure consumers.
+
+### Separation of Concerns
+
+```
+UI Layer:     React Components / Pages
+                ↓
+Logic Layer:  Custom Hooks (useXxx) + Zustand Stores
+                ↓
+Data Layer:   API Services (Axios) + TypeScript Interfaces
+```
+
+**Rule: No business logic in components. No JSX in hooks/stores/services.**
+
+### Component Rules
+- One component per file.
+- Named export preferred for components.
+- Co-locate tests next to components (e.g., `ComponentName.test.tsx`).
+- Prefer functional components with hooks only.
+
+### Hook Rules
+- One concern per hook.
+- Named `use{Feature}{Action}` or `use{Context}{Feature}`.
+- Return stable references; memoize objects/arrays when needed.
+
+### Store Rules (Zustand)
+- One store per domain (e.g., `useAuthStore`, `useCartStore`, `useProductStore`).
+- Stores handle synchronous state and async actions.
+- Keep stores thin — delegate API calls to services.
+
+### Service Rules (Axios)
+- One service per domain (e.g., `authService`, `productService`, `cartService`).
+- Services create Axios instances with base URL and interceptors.
+- No hardcoded URLs — use environment variables (`VITE_API_BASE_URL`).
+
+### TypeScript Rules
+- Strict mode is mandatory.
+- All API response types must be defined in `src/types/`.
+- Never use `any`. Use `unknown` with type narrowing when necessary.
+- Multi-vendor fields (`sellerId`, `sellerName`) are REQUIRED on all product/order/cart types.
+
+---
+
+## File & Folder Structure
+
+```
+src/
+├── components/          # Shared / reusable UI components
+│   ├── ui/              # Primitive UI (Button, Input, Badge, Card, etc.)
+│   └── layout/         # Layout-only components (Header, Footer, Sidebar)
+├── pages/               # Route-level page components
+├── layouts/             # Route layout wrappers (MainLayout, AuthLayout)
+├── hooks/               # Custom hooks
+├── store/               # Zustand stores
+├── services/            # Axios API services
+├── types/               # TypeScript interfaces & types
+├── utils/               # Pure utility functions
+└── assets/              # Static assets (images, fonts)
+```
+
+---
+
+## Routing Convention
+
+- Routes are defined in `src/App.tsx` using React Router v7.
+- Use **nested routes** under `MainLayout` for all buyer-facing pages.
+- Use `AuthLayout` for login and register pages.
+- Route naming: kebab-case (e.g., `/order-confirmation`).
+
+### Route Groups
+
+| Layout | Prefix | Pages |
+|---|---|---|
+| `MainLayout` | `/` | Home, Shop, Product Detail, Cart, Checkout, Orders, Profile, etc. |
+| `AuthLayout` | `/auth` | Login, Register |
+
+---
+
+## Environment Variables
+
+```
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+---
+
+## Code Style
+
+- Use named exports.
+- No default exports for stores or services.
+- Prettier for formatting (if configured).
+- ESLint for linting.
+- Avoid inline styles — use Tailwind utility classes.
+- Use `clsx` or `cn` utility for conditional classes.
