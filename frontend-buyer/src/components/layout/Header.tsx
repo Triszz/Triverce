@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { Logo } from '../common/Logo';
 
 function Header() {
   const navigate = useNavigate();
@@ -20,9 +21,9 @@ function Header() {
           {/* Logo */}
           <Link
             to="/"
-            className="text-[#002b5b] font-bold text-xl tracking-tight shrink-0"
+            className="shrink-0"
           >
-            Triverce
+            <Logo />
           </Link>
 
           {/* Search bar */}

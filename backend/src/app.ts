@@ -29,7 +29,16 @@ const webhookController = container.resolve("webhookController");
 app.use("/api/webhooks", createWebhookRouter(webhookController));
 
 app.use(express.json());
-app.use(cors());
+const FRONTEND_ORIGIN =
+  process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
+
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN,
+    credentials: true,
+    exposedHeaders: ['Authorization'],
+  }),
+);
 app.use(cookieParser());
 
 // Resolve controllers
