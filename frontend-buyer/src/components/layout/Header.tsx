@@ -1,10 +1,17 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { Logo } from '../common/Logo';
+import { useState, useRef, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { User, Package, LogOut } from "lucide-react";
+import { toast } from "sonner";
+import { Logo } from "../common/Logo";
+import { useAuthStore } from "../../store/useAuthStore";
+import { authService } from "../../services/authService";
 
 function Header() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { isAuthenticated, user, clearAuth } = useAuthStore();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -13,16 +20,41 @@ function Header() {
     }
   };
 
+  const handleLogout = async () => {
+    setIsDropdownOpen(false);
+    try {
+      await authService.logout();
+    } catch {
+      // Backend logout endpoint may return 401 if token is already invalid;
+      // proceed with local clear regardless.
+    }
+    clearAuth();
+    toast.success("Logged out successfully");
+    navigate("/auth/login");
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const initials = user?.fullName ? user.fullName.charAt(0).toUpperCase() : "?";
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-8">
-
           {/* Logo */}
-          <Link
-            to="/"
-            className="shrink-0"
-          >
+          <Link to="/" className="shrink-0">
             <Logo />
           </Link>
 
@@ -94,27 +126,80 @@ function Header() {
               </span>
             </Link>
 
-            <Link
-              to="/auth/login"
-              className="text-sm font-medium text-slate-600 hover:text-[#002b5b] transition-colors hidden sm:block"
-            >
-              Sign in
-            </Link>
+            {!isAuthenticated ? (
+              <>
+                <Link
+                  to="/auth/login"
+                  className="text-sm font-medium text-slate-600 hover:text-[#002b5b] transition-colors hidden sm:block"
+                >
+                  Sign in
+                </Link>
 
-            <Link
-              to="/auth/register"
-              className="rounded-lg bg-[#002b5b] px-4 py-2 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors"
-            >
-              Get Started
-            </Link>
+                <Link
+                  to="/auth/register"
+                  className="rounded-lg bg-[#002b5b] px-4 py-2 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors"
+                >
+                  Get Started
+                </Link>
+              </>
+            ) : (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setIsDropdownOpen((prev) => !prev)}
+                  className="w-10 h-10 rounded-full bg-[#002b5b] text-white flex items-center justify-center text-sm font-semibold hover:bg-[#001f3f] transition-colors focus:outline-none focus:ring-2 focus:ring-[#002b5b]/40 cursor-pointer"
+                  aria-label="User menu"
+                  aria-expanded={isDropdownOpen}
+                >
+                  {initials}
+                </button>
+
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-50 py-1">
+                    <div className="px-4 py-2.5 border-b border-slate-100">
+                      <p className="text-sm font-medium text-slate-900 truncate">
+                        {user?.fullName}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {user?.email}
+                      </p>
+                    </div>
+
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <User size={15} className="text-slate-400 shrink-0" />
+                      My Profile
+                    </Link>
+
+                    <Link
+                      to="/orders"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Package size={15} className="text-slate-400 shrink-0" />
+                      My Orders
+                    </Link>
+
+                    <div className="border-t border-slate-100 my-1" />
+
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                    >
+                      <LogOut size={15} className="shrink-0" />
+                      Log out
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
         </div>
 
         {/* Mobile search bar */}
-        <form
-          onSubmit={handleSearch}
-          className="sm:hidden pb-3"
-        >
+        <form onSubmit={handleSearch} className="sm:hidden pb-3">
           <input
             type="search"
             value={searchQuery}
