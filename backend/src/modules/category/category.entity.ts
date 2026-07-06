@@ -1,4 +1,4 @@
-import { CategoryRow } from "../../infrastructure/database/db.schema";
+import type { Category } from "@prisma/client";
 
 export class CategoryEntity {
   constructor(
@@ -13,7 +13,6 @@ export class CategoryEntity {
     public readonly updatedAt: Date,
   ) {}
 
-  // Business rules
   isRootCategory(): boolean {
     return this.parentId === null;
   }
@@ -22,17 +21,17 @@ export class CategoryEntity {
     return this.isActive;
   }
 
-  static fromDatabase(row: CategoryRow): CategoryEntity {
+  static fromDatabase(row: Category): CategoryEntity {
     return new CategoryEntity(
       row.id,
       row.name,
       row.slug,
       row.description,
-      row.parent_id,
-      row.is_active,
-      row.sort_order,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.parentId,
+      row.isActive,
+      row.sortOrder,
+      row.createdAt,
+      row.updatedAt,
     );
   }
 

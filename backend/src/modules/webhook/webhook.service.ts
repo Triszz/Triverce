@@ -1,5 +1,4 @@
-import { Kysely, Transaction } from "kysely";
-import { DatabaseSchema } from "../../infrastructure/database/db.schema";
+import type { PrismaClient } from "@prisma/client";
 import { PaymentRepository } from "../payment/payment.repository";
 import { OrderRepository } from "../order/order.repository";
 import { IPaymentGateway } from "../payment/payment.interface";
@@ -7,54 +6,52 @@ import { PaymentStatus } from "../payment/payment.entity";
 import { OrderStatus } from "../order/order.entity";
 import { BadRequestError } from "../../core/errors/AppError";
 
-type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
-
+/**
+ * WebhookService — Prisma-aware.
+ *
+ * Public API unchanged.
+ *
+ * Uses `prisma.$transaction(async tx => …)` for the atomic webhook
+ * processing flow. The helper `updateRelatedOrders` accepts the same
+ * `Prisma.TransactionClient` that `tx` is, because the repository method
+ * signatures already use `Prisma.TransactionClient` as their optional
+ * `trx` parameter.
+ */
 export class WebhookService {
   constructor(
     private paymentRepository: PaymentRepository,
     private orderRepository: OrderRepository,
     private gateway: IPaymentGateway,
+    private prisma: PrismaClient,
   ) {}
 
   async handlePaymentWebhook(
     rawBody: Buffer,
     signature: string,
   ): Promise<void> {
-    // 1. Verify signature - throw if invalid
     const event = await this.gateway.verifyWebhook(rawBody, signature);
-
-    // 2. Find payment by gatewayRef to get paymentId (MockAdapter has imported paymentId in event.paymentId)
     const { gatewayRef, paymentId, status, rawData } = event;
 
-    // 3. Open a transaction to process all atomic data
-    await this.paymentRepository.client.transaction().execute(async (trx) => {
-      // 4. Idempotency guard - INSERT webhook event
-      // If it has already been processed -> return immediately, do nothing further
+    await this.prisma.$transaction(async (trx) => {
+      // Idempotency guard — INSERT webhook event, skip rest if already seen.
       const isNew = await this.paymentRepository.saveWebhookEvent(
         {
-          id: gatewayRef, // gateway event ID as PK
+          id: gatewayRef,
           gateway: "mock",
-          eventType: `payment.${status}`, // change to 'momo' when production
+          eventType: `payment.${status}`,
           payload: rawData,
         },
         trx,
       );
-
       if (!isNew) return;
 
-      // 5. Find payment
       const payment = await this.paymentRepository.findById(paymentId, trx);
       if (!payment)
         throw new BadRequestError(`Payment with id "${paymentId}" not found`);
 
-      // 6. Validate transition
-      if (!payment.canTransitionTo(status)) {
-        // Payment is in final status (paid/refunded) -> ignore, do not throw
-        // Because the gateway can resend the webhook of the old event
-        return;
-      }
+      // Idempotency: don't transition out of a final status.
+      if (!payment.canTransitionTo(status)) return;
 
-      // 7. Update payment status
       await this.paymentRepository.updateStatus(
         paymentId,
         status,
@@ -65,7 +62,6 @@ export class WebhookService {
         trx,
       );
 
-      // 8. Update all related orders
       await this.updateRelatedOrders(paymentId, status, trx);
     });
   }
@@ -73,7 +69,9 @@ export class WebhookService {
   async updateRelatedOrders(
     paymentId: string,
     paymentStatus: PaymentStatus,
-    trx: DbOrTrx,
+    trx: Parameters<PrismaClient["$transaction"]>[0] extends (tx: infer T) => unknown
+      ? T
+      : never,
   ): Promise<void> {
     const orderIds = await this.paymentRepository.loadOrderIds(paymentId, trx);
 

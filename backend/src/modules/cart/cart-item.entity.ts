@@ -1,7 +1,4 @@
-import {
-  CartItemWithDetails,
-  CartItemRow,
-} from "../../infrastructure/database/db.schema";
+import type { CartItem, ProductVariant, Product } from "@prisma/client";
 
 export class CartItemEntity {
   constructor(
@@ -12,7 +9,7 @@ export class CartItemEntity {
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
 
-    // Information join from product_variants + products to display
+    // Information joined from product_variants + products to display
     public readonly variantSku?: string,
     public readonly variantPrice?: number,
     public readonly productName?: string,
@@ -24,30 +21,45 @@ export class CartItemEntity {
     return (this.variantPrice ?? 0) * this.quantity;
   }
 
-  static fromRow(row: CartItemRow): CartItemEntity {
+  /**
+   * Adapter from a plain `CartItem` (no joins).
+   * Used for transactional write paths that don't need display fields.
+   */
+  static fromRow(row: CartItem): CartItemEntity {
     return new CartItemEntity(
       row.id,
-      row.cart_id,
-      row.variant_id,
+      row.cartId,
+      row.variantId,
       row.quantity,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.createdAt,
+      row.updatedAt,
     );
   }
 
-  static fromDatabase(row: CartItemWithDetails): CartItemEntity {
+  /**
+   * Adapter from a `CartItem` row joined with variant + product details.
+   * Fields with `| null | undefined` come from optional joins.
+   */
+  static fromDatabase(
+    row: CartItem & {
+      variant?: ProductVariant | null;
+      variantProduct?: Product | null;
+    },
+  ): CartItemEntity {
+    const variant = row.variant ?? null;
+    const product = row.variantProduct ?? null;
     return new CartItemEntity(
       row.id,
-      row.cart_id,
-      row.variant_id,
+      row.cartId,
+      row.variantId,
       row.quantity,
-      new Date(row.created_at),
-      new Date(row.updated_at),
-      row.variant_sku,
-      row.variant_price,
-      row.product_name,
-      row.product_slug,
-      row.variant_image_url,
+      row.createdAt,
+      row.updatedAt,
+      variant?.sku,
+      variant ? Number(variant.price) : undefined,
+      product?.name,
+      product?.slug,
+      variant?.imageUrl,
     );
   }
 

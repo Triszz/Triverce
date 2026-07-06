@@ -1,4 +1,4 @@
-import { OrderItemRow } from "../../infrastructure/database/db.schema";
+import type { OrderItem } from "@prisma/client";
 
 export class OrderItemEntity {
   constructor(
@@ -16,16 +16,16 @@ export class OrderItemEntity {
     return this.unitPrice * this.quantity;
   }
 
-  static fromDatabase(row: OrderItemRow): OrderItemEntity {
+  static fromDatabase(row: OrderItem): OrderItemEntity {
     return new OrderItemEntity(
       row.id,
-      row.order_id,
-      row.variant_id,
+      row.orderId,
+      row.variantId,
       row.quantity,
-      Number(row.unit_price),
-      row.product_name,
-      row.variant_sku,
-      new Date(row.created_at),
+      Number(row.unitPrice),
+      row.productName,
+      row.variantSku,
+      row.createdAt,
     );
   }
 

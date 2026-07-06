@@ -8,14 +8,19 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate:up": "db-migrate up --config database.json",
-    "migrate:down": "db-migrate down --config database.json"
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "awilix": "^13.0.3",
     "axios": "^1.16.0",
     "bcryptjs": "^3.0.3",
@@ -26,7 +31,6 @@
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "kysely": "^0.28.14",
     "multer": "^2.1.1",
     "pg": "^8.20.0",
     "sharp": "^0.34.5",
@@ -41,9 +45,8 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.20.0",
-    "db-migrate": "^0.11.14",
-    "db-migrate-pg": "^1.5.2",
     "nodemon": "^3.1.14",
+    "prisma": "^7.8.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

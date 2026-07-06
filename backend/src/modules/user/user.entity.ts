@@ -1,4 +1,6 @@
-import { UserRow } from "../../infrastructure/database/db.schema";
+import { PrismaClient } from "@prisma/client";
+import type { User } from "@prisma/client";
+
 export class UserEntity {
   constructor(
     public readonly id: string,
@@ -20,16 +22,22 @@ export class UserEntity {
     return this.role === "seller";
   }
 
-  static fromDatabase(row: UserRow): UserEntity {
+  /**
+   * Adapt a Prisma `User` row (camelCase, Decimal timestamps, etc.)
+   * to the public-facing entity shape (snake_case → camelCase,
+   * Decimal columns → number). Centralized here so repositories
+   * stay clean.
+   */
+  static fromDatabase(row: User): UserEntity {
     return new UserEntity(
       row.id,
       row.email,
-      row.password_hash,
-      row.full_name,
+      row.passwordHash,
+      row.fullName,
       row.role,
-      row.is_active,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.isActive,
+      row.createdAt,
+      row.updatedAt,
     );
   }
 

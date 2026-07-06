@@ -1,56 +1,54 @@
-import { Kysely } from "kysely";
-import { DatabaseSchema } from "../../infrastructure/database/db.schema";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { UserEntity } from "./user.entity";
 
+/**
+ * UserRepository — Prisma-backed.
+ *
+ * Public API unchanged from the Kysely version:
+ *   findById / findByEmail / create / update / setActiveStatus /
+ *   delete / emailExists
+ * Service layer does not need to be modified.
+ *
+ * Decimal/number conversion happens inside the entity's fromDatabase().
+ */
 export class UserRepository {
-  constructor(private db: Kysely<DatabaseSchema>) {}
+  constructor(private readonly prisma: PrismaClient) {}
 
-  // Find user by id
   async findById(id: string): Promise<UserEntity | null> {
-    const row = await this.db
-      .selectFrom("users")
-      .selectAll()
-      .where("id", "=", id)
-      .where("deleted_at", "is", null)
-      .where("is_active", "=", true)
-      .executeTakeFirst();
-
+    const row = await this.prisma.user.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        isActive: true,
+      },
+    });
     return row ? UserEntity.fromDatabase(row) : null;
   }
 
-  // Find user by email
   async findByEmail(email: string): Promise<UserEntity | null> {
-    const row = await this.db
-      .selectFrom("users")
-      .selectAll()
-      .where("email", "=", email)
-      .where("deleted_at", "is", null)
-      .executeTakeFirst();
-
+    const row = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null },
+    });
     return row ? UserEntity.fromDatabase(row) : null;
   }
 
-  // Create user
   async create(data: {
     email: string;
     passwordHash: string;
     fullName: string;
     role?: "customer" | "admin" | "seller";
   }): Promise<UserEntity> {
-    const row = await this.db
-      .insertInto("users")
-      .values({
+    const row = await this.prisma.user.create({
+      data: {
         email: data.email,
-        password_hash: data.passwordHash,
-        full_name: data.fullName,
+        passwordHash: data.passwordHash,
+        fullName: data.fullName,
         role: data.role ?? "customer",
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+      },
+    });
     return UserEntity.fromDatabase(row);
   }
 
-  // Update user
   async update(
     id: string,
     data: Partial<{
@@ -58,63 +56,52 @@ export class UserRepository {
       passwordHash: string;
     }>,
   ): Promise<UserEntity | null> {
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date(),
-    };
+    const updateData: Prisma.UserUpdateInput = {};
+    if (data.fullName !== undefined) updateData.fullName = data.fullName;
+    if (data.passwordHash !== undefined) updateData.passwordHash = data.passwordHash;
 
-    if (data.fullName !== undefined) updateData.full_name = data.fullName;
-    if (data.passwordHash !== undefined)
-      updateData.password_hash = data.passwordHash;
-
-    const row = await this.db
-      .updateTable("users")
-      .set(updateData)
-      .where("id", "=", id)
-      .where("deleted_at", "is", null)
-      .returningAll()
-      .executeTakeFirst();
-
-    return row ? UserEntity.fromDatabase(row) : null;
+    const row = await this.prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+    return UserEntity.fromDatabase(row);
   }
 
-  // Set user active status - admin only
   async setActiveStatus(
     id: string,
     isActive: boolean,
   ): Promise<UserEntity | null> {
-    const row = await this.db
-      .updateTable("users")
-      .set({
-        is_active: isActive,
-        updated_at: new Date(),
-      })
-      .where("id", "=", id)
-      .where("deleted_at", "is", null)
-      .returningAll()
-      .executeTakeFirst();
-
-    return row ? UserEntity.fromDatabase(row) : null;
+    try {
+      const row = await this.prisma.user.update({
+        where: { id },
+        data: { isActive },
+      });
+      return UserEntity.fromDatabase(row);
+    } catch {
+      return null;
+    }
   }
 
-  // Delete user
   async delete(id: string): Promise<boolean> {
-    const result = await this.db
-      .updateTable("users")
-      .set({ deleted_at: new Date(), is_active: false, updated_at: new Date() })
-      .where("id", "=", id)
-      .where("deleted_at", "is", null)
-      .executeTakeFirst();
-
-    return Number(result.numUpdatedRows) > 0;
+    try {
+      await this.prisma.user.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async emailExists(email: string): Promise<boolean> {
-    const row = await this.db
-      .selectFrom("users")
-      .select("id")
-      .where("email", "=", email)
-      .executeTakeFirst();
-
-    return !!row;
+    const found = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    return !!found;
   }
 }

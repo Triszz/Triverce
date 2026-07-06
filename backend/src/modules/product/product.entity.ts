@@ -1,5 +1,4 @@
-import { ProductRow } from "../../infrastructure/database/db.schema";
-import { ProductVariantEntity } from "./product-variant.entity";
+import type { Product } from "@prisma/client";
 
 export class ProductEntity {
   constructor(
@@ -13,14 +12,13 @@ export class ProductEntity {
     public readonly isActive: boolean,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
-    public readonly variants: ReadonlyArray<ProductVariantEntity> = [],
+    public readonly variants: ReadonlyArray<import("./product-variant.entity").ProductVariantEntity> = [],
   ) {
     if (basePrice < 0) {
       throw new Error("Product base price cannot be negative");
     }
   }
 
-  // Business rules
   isAvailableForSale(): boolean {
     return this.isActive && this.hasActiveVariants();
   }
@@ -47,25 +45,24 @@ export class ProductEntity {
   }
 
   static fromDatabase(
-    row: ProductRow,
-    variants: ProductVariantEntity[] = [],
+    row: Product,
+    variants: import("./product-variant.entity").ProductVariantEntity[] = [],
   ): ProductEntity {
     return new ProductEntity(
       row.id,
-      row.seller_id,
-      row.category_id,
+      row.sellerId,
+      row.categoryId,
       row.name,
       row.slug,
       row.description,
-      row.base_price,
-      row.is_active,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      Number(row.basePrice),
+      row.isActive,
+      row.createdAt,
+      row.updatedAt,
       variants,
     );
   }
 
-  // Response for List Page
   toPublicSummary() {
     return {
       id: this.id,
@@ -79,7 +76,6 @@ export class ProductEntity {
     };
   }
 
-  // Response for Detail Page
   toPublicDetail() {
     return {
       id: this.id,

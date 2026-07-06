@@ -1,12 +1,24 @@
-import { ProductVariantWithStock } from "../../infrastructure/database/db.schema";
+import type { ProductVariant } from "@prisma/client";
+
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
 
 const LOW_STOCK_THRESHOLD = 5;
+
 export interface VariantAttribute {
   attributeId: string;
   attributeName: string;
   value: string;
 }
+
+/**
+ * Row shape produced by the repository's `loadVariantsWithAttributes`
+ * helper. It's a `ProductVariant` row joined with an optional `available`
+ * number (computed from `inventory.quantity - inventory.reserved`).
+ */
+export type ProductVariantRowWithStock = ProductVariant & {
+  available?: number | null;
+};
+
 export class ProductVariantEntity {
   constructor(
     public readonly id: string,
@@ -25,13 +37,13 @@ export class ProductVariantEntity {
     }
   }
 
-  // Business rules
   get stockStatus(): StockStatus {
     if (this.available === undefined) return "in_stock";
     if (this.available <= 0) return "out_of_stock";
     if (this.available <= LOW_STOCK_THRESHOLD) return "low_stock";
     return "in_stock";
   }
+
   isAvailable(): boolean {
     return this.isActive && this.stockStatus !== "out_of_stock";
   }
@@ -48,18 +60,18 @@ export class ProductVariantEntity {
   }
 
   static fromDatabase(
-    row: ProductVariantWithStock,
+    row: ProductVariantRowWithStock,
     attributes: VariantAttribute[] = [],
   ): ProductVariantEntity {
     return new ProductVariantEntity(
       row.id,
-      row.product_id,
+      row.productId,
       row.sku,
-      row.price,
-      row.image_url,
-      row.is_active,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      Number(row.price),
+      row.imageUrl,
+      row.isActive,
+      row.createdAt,
+      row.updatedAt,
       attributes,
       row.available != null ? Number(row.available) : undefined,
     );

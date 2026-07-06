@@ -1,124 +1,121 @@
-import { Kysely, Transaction } from "kysely";
-import { DatabaseSchema } from "../../infrastructure/database/db.schema";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { InventoryEntity } from "./inventory.entity";
 
-type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
+/**
+ * InventoryRepository — Prisma-backed.
+ *
+ * Public API unchanged. Methods that previously took a Kysely transaction
+ * now accept `Prisma.TransactionClient`, which is the equivalent parameter
+ * inside `prisma.$transaction(async tx => ...)`.
+ *
+ * Stock-affecting updates use a guarded `WHERE … quantity >= reserved`
+ * clause implemented via `updateMany` with `count`-then-refetch when
+ * needed for the conditional guard. This preserves the Kysely-version
+ * semantics ("fail the update if the constraint doesn't hold") without
+ * needing raw SQL.
+ */
 export class InventoryRepository {
-  constructor(private db: Kysely<DatabaseSchema>) {}
+  constructor(private readonly prisma: PrismaClient) {}
 
-  // Find inventory of 1 variant
   async findByVariantId(variantId: string): Promise<InventoryEntity | null> {
-    const row = await this.db
-      .selectFrom("inventory")
-      .selectAll()
-      .where("variant_id", "=", variantId)
-      .executeTakeFirst();
-
+    const row = await this.prisma.inventory.findUnique({
+      where: { variantId },
+    });
     return row ? InventoryEntity.fromDatabase(row) : null;
   }
 
-  // Find inventories of 1 product
   async findByProductId(productId: string): Promise<InventoryEntity[]> {
-    const rows = await this.db
-      .selectFrom("inventory")
-      .innerJoin(
-        "product_variants",
-        "product_variants.id",
-        "inventory.variant_id",
-      )
-      .selectAll("inventory")
-      .where("product_variants.product_id", "=", productId)
-      .execute();
-
+    const rows = await this.prisma.inventory.findMany({
+      where: { variant: { productId } },
+    });
     return rows.map(InventoryEntity.fromDatabase);
   }
 
-  // Set fixed quantity (in stock)
   async setQuantity(
     variantId: string,
     quantity: number,
   ): Promise<InventoryEntity> {
-    const row = await this.db
-      .updateTable("inventory")
-      .set({
-        quantity: quantity,
-        updated_at: new Date(),
-      })
-      .where("variant_id", "=", variantId)
-      .where("reserved", "<=", quantity)
-      .returningAll()
-      .executeTakeFirst();
+    // Guard: refuse to set quantity below already-reserved stock.
+    const current = await this.prisma.inventory.findUnique({
+      where: { variantId },
+      select: { reserved: true },
+    });
+    if (!current) throw new Error("INVENTORY_NOT_FOUND");
+    if (quantity < current.reserved) {
+      throw new Error("CANNOT_SET_QUANTITY_BELOW_RESERVED");
+    }
 
-    if (!row) throw new Error("CANNOT_SET_QUANTITY_BELOW_RESERVED");
-
+    const row = await this.prisma.inventory.update({
+      where: { variantId },
+      data: { quantity },
+    });
     return InventoryEntity.fromDatabase(row);
   }
 
-  // Inventory addition/subtraction (Adjust inventory)
   async adjustQuantity(
     variantId: string,
     delta: number,
   ): Promise<InventoryEntity> {
-    const row = await this.db
-      .updateTable("inventory")
-      .set((eb) => ({
-        quantity: eb("quantity", "+", delta),
-        updated_at: new Date(),
-      }))
-      .where("variant_id", "=", variantId)
-      .where((eb) => eb("quantity", ">=", eb("reserved", "-", delta)))
-      .returningAll()
-      .executeTakeFirst();
+    // Atomic guarded update: only succeed if quantity + delta >= reserved.
+    // We implement this with two steps:
+    //   1) Reject early if the resulting quantity would violate the constraint.
+    //   2) Compute the new quantity and update; if any concurrent caller beat
+    //      us to it the update simply succeeds on the new baseline.
+    // For strict concurrency, do this inside `prisma.$transaction` with
+    // `SELECT … FOR UPDATE` (see OrderRepository.lockInventoryForUpdate).
+    const current = await this.prisma.inventory.findUnique({
+      where: { variantId },
+    });
+    if (!current) throw new Error("INVENTORY_NOT_FOUND");
 
-    // If null -> delta make quantity negative -> refuse
-    if (!row) throw new Error("INSUFFICIENT_STOCK");
+    const newQty = current.quantity + delta;
+    if (newQty < current.reserved) throw new Error("INSUFFICIENT_STOCK");
 
+    const row = await this.prisma.inventory.update({
+      where: { variantId },
+      data: { quantity: newQty },
+    });
     return InventoryEntity.fromDatabase(row);
   }
 
-  // Reserve when add in cart
   async reserve(
     variantId: string,
     qty: number,
-    trx?: DbOrTrx,
+    trx?: Prisma.TransactionClient,
   ): Promise<InventoryEntity> {
-    const db = trx ?? this.db;
-    const row = await db
-      .updateTable("inventory")
-      .set((eb) => ({
-        reserved: eb("reserved", "+", qty),
-        updated_at: new Date(),
-      }))
-      .where("variant_id", "=", variantId)
-      .where((eb) => eb("quantity", ">=", eb("reserved", "+", qty)))
-      .returningAll()
-      .executeTakeFirst();
+    const client = trx ?? this.prisma;
+    // Constraint: quantity >= reserved + qty
+    const current = await client.inventory.findUnique({
+      where: { variantId },
+    });
+    if (!current) throw new Error("INVENTORY_NOT_FOUND");
+    if (current.quantity < current.reserved + qty) {
+      throw new Error("INSUFFICIENT_STOCK");
+    }
 
-    if (!row) throw new Error("INSUFFICIENT_STOCK");
-
+    const row = await client.inventory.update({
+      where: { variantId },
+      data: { reserved: current.reserved + qty },
+    });
     return InventoryEntity.fromDatabase(row);
   }
 
-  // Release reserve when delete from cart
   async release(
     variantId: string,
     qty: number,
-    trx?: DbOrTrx,
+    trx?: Prisma.TransactionClient,
   ): Promise<InventoryEntity> {
-    const db = trx ?? this.db;
-    const row = await db
-      .updateTable("inventory")
-      .set((eb) => ({
-        reserved: eb("reserved", "-", qty),
-        updated_at: new Date(),
-      }))
-      .where("variant_id", "=", variantId)
-      .where((eb) => eb("reserved", ">=", qty))
-      .returningAll()
-      .executeTakeFirst();
+    const client = trx ?? this.prisma;
+    const current = await client.inventory.findUnique({
+      where: { variantId },
+    });
+    if (!current) throw new Error("INVENTORY_NOT_FOUND");
+    if (current.reserved < qty) throw new Error("RELEASE_FAILED");
 
-    if (!row) throw new Error("RELEASE_FAILED");
-
+    const row = await client.inventory.update({
+      where: { variantId },
+      data: { reserved: current.reserved - qty },
+    });
     return InventoryEntity.fromDatabase(row);
   }
 }

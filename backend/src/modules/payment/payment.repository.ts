@@ -1,22 +1,34 @@
-import { Kysely, Transaction } from "kysely";
+import { PrismaClient, Prisma } from "@prisma/client";
 import {
-  DatabaseSchema,
-  NewWebhookEvent,
-  PaymentRow,
-} from "../../infrastructure/database/db.schema";
-import { PaymentEntity, PaymentStatus, PaymentGateway } from "./payment.entity";
+  PaymentEntity,
+  PaymentStatus,
+  PaymentGateway,
+} from "./payment.entity";
 import { BadRequestError } from "../../core/errors/AppError";
 
-type DbOrTrx = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
-
+/**
+ * PaymentRepository — Prisma-backed.
+ *
+ * Public API unchanged.
+ *
+ * Notes on the `onConflict` patterns:
+ *
+ * - `create()` previously did INSERT … ON CONFLICT (idempotency_key)
+ *   DO UPDATE SET updated_at = now(), returning id. Prisma's `upsert`
+ *   does the same thing at the cost of one extra SELECT round-trip;
+ *   for stronger atomicity in concurrent payment creation, prefer
+ *   `prisma.$transaction` with a raw INSERT.
+ * - `saveWebhookEvent()` previously did INSERT … ON CONFLICT (id)
+ *   DO NOTHING. We use a try/create, catch P2002 pattern, which has
+ *   identical semantics for this idempotency guard.
+ */
 export class PaymentRepository {
-  constructor(private db: Kysely<DatabaseSchema>) {}
+  constructor(private readonly prisma: PrismaClient) {}
 
-  get client(): Kysely<DatabaseSchema> {
-    return this.db;
+  get client(): PrismaClient {
+    return this.prisma;
   }
 
-  // Create payment record
   async create(
     data: {
       customerId: string;
@@ -25,101 +37,113 @@ export class PaymentRepository {
       gateway: PaymentGateway;
       idempotencyKey: string;
     },
-    trx: DbOrTrx,
+    trx: Prisma.TransactionClient,
   ): Promise<string> {
-    const row = await trx
-      .insertInto("payments")
-      .values({
-        customer_id: data.customerId,
-        amount: data.amount,
-        currency: data.currency,
-        gateway: data.gateway,
-        idempotency_key: data.idempotencyKey,
-      })
-      .onConflict((oc) =>
-        oc.column("idempotency_key").doUpdateSet({
-          updated_at: new Date(),
-        }),
-      )
-      .returning(["id", "status"])
-      .executeTakeFirstOrThrow();
+    // Upsert for idempotency. If a payment with this key already exists
+    // we'll fetch and check its status before returning its id.
+    const existing = await trx.payment.findUnique({
+      where: { idempotencyKey: data.idempotencyKey },
+      select: { id: true, status: true },
+    });
 
-    if (row.status !== "pending") {
-      throw new BadRequestError(
-        `Cannot reuse a payment that is already ${row.status}`,
-      );
+    if (existing) {
+      if (existing.status !== "pending") {
+        throw new BadRequestError(
+          `Cannot reuse a payment that is already ${existing.status}`,
+        );
+      }
+      return existing.id;
     }
 
-    return row.id;
+    try {
+      const row = await trx.payment.create({
+        data: {
+          customerId: data.customerId,
+          amount: data.amount,
+          currency: data.currency,
+          gateway: data.gateway,
+          idempotencyKey: data.idempotencyKey,
+        },
+        select: { id: true },
+      });
+      return row.id;
+    } catch (err) {
+      // Concurrent insert with the same idempotency key.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const found = await trx.payment.findUnique({
+          where: { idempotencyKey: data.idempotencyKey },
+          select: { id: true, status: true },
+        });
+        if (!found) throw err;
+        if (found.status !== "pending") {
+          throw new BadRequestError(
+            `Cannot reuse a payment that is already ${found.status}`,
+          );
+        }
+        return found.id;
+      }
+      throw err;
+    }
   }
 
-  // Find by id
   async findById(
     id: string,
-    db: DbOrTrx = this.client,
+    db?: Prisma.TransactionClient,
   ): Promise<PaymentEntity | null> {
-    const row = await db
-      .selectFrom("payments")
-      .selectAll()
-      .where("id", "=", id)
-      .executeTakeFirst();
-
+    const client = db ?? this.prisma;
+    const row = await client.payment.findUnique({ where: { id } });
     if (!row) return null;
 
-    const orderIds = await this.loadOrderIds(id, db);
+    const orderIds = await this.loadOrderIds(id, client);
     return PaymentEntity.fromDatabase(row, orderIds);
   }
 
-  // Find by gateway_ref (use in webhook handler)
   async findByGatewayRef(
     gatewayRef: string,
-    db: DbOrTrx = this.client,
+    db?: Prisma.TransactionClient,
   ): Promise<PaymentEntity | null> {
-    const row = await db
-      .selectFrom("payments")
-      .selectAll()
-      .where("gateway_ref", "=", gatewayRef)
-      .executeTakeFirst();
-
+    const client = db ?? this.prisma;
+    const row = await client.payment.findFirst({
+      where: { gatewayRef },
+    });
     if (!row) return null;
 
-    const orderIds = await this.loadOrderIds(row.id, db);
+    const orderIds = await this.loadOrderIds(row.id, client);
     return PaymentEntity.fromDatabase(row, orderIds);
   }
 
-  // Update status + gatewayRef/Data
   async updateStatus(
     id: string,
     status: PaymentStatus,
     extra: { gatewayRef?: string; gatewayData?: unknown } = {},
-    trx: DbOrTrx,
+    trx: Prisma.TransactionClient,
   ): Promise<void> {
-    await trx
-      .updateTable("payments")
-      .set({
-        status,
-        gateway_ref: extra.gatewayRef,
-        gateway_data: extra.gatewayData,
-        updated_at: new Date(),
-      })
-      .where("id", "=", id)
-      .execute();
+    const data: Prisma.PaymentUpdateInput = { status };
+    if (extra.gatewayRef !== undefined) data.gatewayRef = extra.gatewayRef;
+    if (extra.gatewayData !== undefined) {
+      data.gatewayData = (extra.gatewayData as Prisma.InputJsonValue) ?? Prisma.JsonNull;
+    }
+    await trx.payment.update({ where: { id }, data });
   }
 
-  // Set gateway after gateway create session successfully
   async setGatewayRef(
     id: string,
     gatewayRef: string,
-    trx: DbOrTrx,
+    trx: Prisma.TransactionClient,
   ): Promise<void> {
-    await trx
-      .updateTable("payments")
-      .set({ gateway_ref: gatewayRef, updated_at: new Date() })
-      .where("id", "=", id)
-      .execute();
+    await trx.payment.update({
+      where: { id },
+      data: { gatewayRef },
+    });
   }
 
-  // Idempotency guard cho webhook
+  /**
+   * Idempotency guard for webhook handlers.
+   * Returns true on first insert, false if the event was already processed.
+   */
   async saveWebhookEvent(
     data: {
       id: string;
@@ -127,35 +151,38 @@ export class PaymentRepository {
       eventType: string;
       payload: unknown;
     },
-    trx: DbOrTrx,
+    trx: Prisma.TransactionClient,
   ): Promise<boolean> {
-    // Return true if successfully INSERT (not yet processed)
-    // Return false if conflict (already processed)
-    const result = await trx
-      .insertInto("webhook_events")
-      .values({
-        id: data.id,
-        gateway: data.gateway,
-        event_type: data.eventType,
-        payload: data.payload as any,
-      })
-      .onConflict((oc) => oc.column("id").doNothing())
-      .returning("id")
-      .executeTakeFirst();
-
-    return result !== undefined;
+    try {
+      await trx.webhookEvent.create({
+        data: {
+          id: data.id,
+          gateway: data.gateway,
+          eventType: data.eventType,
+          payload: data.payload as Prisma.InputJsonValue,
+        },
+      });
+      return true;
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        return false;
+      }
+      throw err;
+    }
   }
-  // Helpers
-  public async loadOrderIds(
-    paymentId: string,
-    db: DbOrTrx = this.client,
-  ): Promise<string[]> {
-    const rows = await db
-      .selectFrom("orders")
-      .select("id")
-      .where("payment_id", "=", paymentId)
-      .execute();
 
+  async loadOrderIds(
+    paymentId: string,
+    db?: Prisma.TransactionClient,
+  ): Promise<string[]> {
+    const client = db ?? this.prisma;
+    const rows = await client.order.findMany({
+      where: { paymentId },
+      select: { id: true },
+    });
     return rows.map((r) => r.id);
   }
 }

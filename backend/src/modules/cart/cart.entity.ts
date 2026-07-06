@@ -1,7 +1,8 @@
 import { CartItemEntity } from "./cart-item.entity";
-import { CartRow } from "../../infrastructure/database/db.schema";
+import type { Cart } from "@prisma/client";
 
 export type CartStatus = "active" | "checked_out" | "abandoned";
+
 export class CartEntity {
   constructor(
     public readonly id: string,
@@ -20,14 +21,14 @@ export class CartEntity {
     return this.items.reduce((sum, item) => sum + item.subtotal, 0);
   }
 
-  static fromDatabase(row: CartRow, items: CartItemEntity[]): CartEntity {
+  static fromDatabase(row: Cart, items: CartItemEntity[]): CartEntity {
     return new CartEntity(
       row.id,
-      row.user_id,
+      row.userId,
       row.status,
       items,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.createdAt,
+      row.updatedAt,
     );
   }
 

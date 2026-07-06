@@ -1,4 +1,4 @@
-import { OrderStatusLogRow } from "../../infrastructure/database/db.schema";
+import type { OrderStatusLog } from "@prisma/client";
 
 export class OrderStatusLogEntity {
   constructor(
@@ -11,15 +11,15 @@ export class OrderStatusLogEntity {
     public readonly createdAt: Date,
   ) {}
 
-  static fromDatabase(row: OrderStatusLogRow): OrderStatusLogEntity {
+  static fromDatabase(row: OrderStatusLog): OrderStatusLogEntity {
     return new OrderStatusLogEntity(
       row.id,
-      row.order_id,
-      row.from_status,
-      row.to_status,
-      row.changed_by,
+      row.orderId,
+      row.fromStatus,
+      row.toStatus,
+      row.changedBy,
       row.note,
-      new Date(row.created_at),
+      row.createdAt,
     );
   }
 

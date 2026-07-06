@@ -1,6 +1,6 @@
+import type { PrismaClient, Prisma } from "@prisma/client";
 import { OrderRepository } from "./order.repository";
 import { OrderEntity } from "./order.entity";
-import { CartEntity } from "../cart/cart.entity";
 import {
   CreateOrderDto,
   UpdateOrderStatusDto,
@@ -13,17 +13,25 @@ import {
 } from "../../core/errors/AppError";
 import { CartRepository } from "../cart/cart.repository";
 import { PaymentRepository } from "../payment/payment.repository";
-import { IPaymentGateway } from "../payment/payment.interface";
+import type { IPaymentGateway } from "../payment/payment.interface";
 
+/**
+ * OrderService — Prisma-aware.
+ *
+ * Public API unchanged. Service-internal transactions now use
+ * `prisma.$transaction(async tx => …)`. The `tx` callback receives a
+ * `Prisma.TransactionClient` that is passed into every repository method
+ * that previously accepted a Kysely transaction handle.
+ */
 export class OrderService {
   constructor(
     private orderRepository: OrderRepository,
     private cartRepository: CartRepository,
     private paymentRepository: PaymentRepository,
     private gateway: IPaymentGateway,
+    private prisma: PrismaClient,
   ) {}
 
-  // Checkout
   async checkout(
     customerId: string,
     dto: CreateOrderDto,
@@ -34,7 +42,6 @@ export class OrderService {
     paymentIds?: string[];
     paymentUrl: string;
   }> {
-    // Validate cart
     const cart = await this.cartRepository.findActiveByUserId(customerId);
     if (!cart || cart.items.length === 0)
       throw new BadRequestError("Cart is empty");
@@ -47,7 +54,6 @@ export class OrderService {
       sellerGroups.get(sellerId)!.push(item);
     }
 
-    // Calculate the total amount for the checkout
     const totalAmount = cart.items.reduce(
       (sum, item) => sum + (item.variantPrice ?? 0) * item.quantity,
       0,
@@ -58,17 +64,14 @@ export class OrderService {
     let singlePaymentId: string | undefined;
     const codPaymentIds: string[] = [];
 
-    await this.orderRepository.client.transaction().execute(async (trx) => {
-      // COD logic
+    await this.prisma.$transaction(async (trx) => {
       if (dto.gateway === "cod") {
         for (const [sellerId, items] of sellerGroups) {
-          // Calculate the total amount for this Seller
           const orderTotal = items.reduce(
             (sum, it) => sum + (it.variantPrice ?? 0) * it.quantity,
             0,
           );
 
-          // Create a separate payment
           const paymentId = await this.paymentRepository.create(
             {
               customerId,
@@ -81,7 +84,6 @@ export class OrderService {
           );
           codPaymentIds.push(paymentId);
 
-          // Create an Order and assign it to the Payment you just created
           const order = await this.createOrderForSeller(
             customerId,
             sellerId,
@@ -93,7 +95,6 @@ export class OrderService {
           createdOrders.push(order);
         }
       } else {
-        // MoMo, prepay
         singlePaymentId = await this.paymentRepository.create(
           {
             customerId,
@@ -118,19 +119,17 @@ export class OrderService {
         }
       }
 
-      // Delete cart
+      // Mark cart as checked_out and clear items.
       await this.cartRepository.clearItems(cart.id, trx);
-      await trx
-        .updateTable("carts")
-        .set({ status: "checked_out", updated_at: new Date() })
-        .where("id", "=", cart.id)
-        .execute();
+      await trx.cart.update({
+        where: { id: cart.id },
+        data: { status: "checked_out" },
+      });
     });
 
     let paymentUrl = dto.returnUrl;
 
     if (dto.gateway === "cod") {
-      // If it's a COD (Cash on Delivery) payment, return the list of payment IDs; no need to call MoMo
       return {
         orders: createdOrders,
         paymentMethod: "cod",
@@ -139,10 +138,9 @@ export class OrderService {
       };
     }
 
-    // If using MoMo, call the API to create a payment link
     try {
       const session = await this.gateway.createSession({
-        paymentId: singlePaymentId!, // At this point, singlePaymentId definitely has value
+        paymentId: singlePaymentId!,
         amount: totalAmount,
         currency: "VND",
         returnUrl: dto.returnUrl,
@@ -155,7 +153,8 @@ export class OrderService {
       await this.paymentRepository.setGatewayRef(
         singlePaymentId!,
         session.gatewayRef,
-        this.paymentRepository.client,
+        // Independent of the checkout transaction (it's already committed).
+        this.prisma,
       );
     } catch (error) {
       console.error("Payment gateway call error:", error);
@@ -164,7 +163,6 @@ export class OrderService {
       );
     }
 
-    // Return for MoMo
     return {
       orders: createdOrders,
       paymentMethod: dto.gateway ?? "momo",
@@ -173,7 +171,6 @@ export class OrderService {
     };
   }
 
-  // Get user orders
   async getMyOrders(
     userId: string,
     role: string,
@@ -193,7 +190,6 @@ export class OrderService {
     return { ...result, page, limit };
   }
 
-  // Get order by id
   async getOrderById(
     orderId: string,
     user: { userId: string; role: string },
@@ -201,18 +197,15 @@ export class OrderService {
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw new NotFoundError(`Order with id "${orderId}" not found`);
 
-    // Customer only views their own order
     if (user.role === "customer" && order.customerId !== user.userId)
       throw new ForbiddenError("Access denied");
 
-    // Seller only views order that has sellerId = their id
     if (user.role === "seller" && order.sellerId !== user.userId)
       throw new ForbiddenError("Access denied");
 
     return order;
   }
 
-  // Update order status
   async updateStatus(
     orderId: string,
     dto: UpdateOrderStatusDto,
@@ -221,17 +214,15 @@ export class OrderService {
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw new NotFoundError(`Order with id "${orderId}" not found`);
 
-    // Seller only updates their order
     if (user.role === "seller" && order.sellerId !== user.userId)
       throw new ForbiddenError("Access denied");
 
-    // Validate valid transaction
     if (!order.canTransitionTo(dto.status))
       throw new BadRequestError(
         `Cannot transition from "${order.status}" to "${dto.status}"`,
       );
 
-    await this.orderRepository.client.transaction().execute(async (trx) => {
+    await this.prisma.$transaction(async (trx) => {
       await this.orderRepository.updateStatus(
         orderId,
         dto.status,
@@ -253,7 +244,6 @@ export class OrderService {
     return (await this.orderRepository.findById(orderId))!;
   }
 
-  // Cancel order
   async cancelOrder(
     orderId: string,
     dto: CancelOrderDto,
@@ -262,18 +252,13 @@ export class OrderService {
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw new NotFoundError(`Order with id "${orderId}" not found`);
 
-    // Customers only cancel their order when they are pending
     if (user.role === "customer") {
-      if (order.customerId !== user.userId)
-        throw new ForbiddenError("Access denied");
-
+      if (order.customerId !== user.userId) throw new ForbiddenError("Access denied");
       if (!order.canBeCancelledByCustomer())
         throw new BadRequestError(
           `Cannot cancel order with status "${order.status}"`,
         );
     }
-
-    // Seller only cancel their order
     if (user.role === "seller" && order.sellerId !== user.userId)
       throw new ForbiddenError("Access denied");
 
@@ -282,16 +267,14 @@ export class OrderService {
         `Cannot cancel order with status "${order.status}"`,
       );
 
-    await this.orderRepository.client.transaction().execute(async (trx) => {
+    await this.prisma.$transaction(async (trx) => {
       if (order.paymentId) {
-        // 1. Get current payment information
         const payment = await this.paymentRepository.findById(
           order.paymentId,
           trx,
         );
 
         if (payment && payment.status === "paid") {
-          // 2. Online payment (MoMo, etc.)
           if (payment.gateway !== "cod" && payment.gatewayRef) {
             try {
               const refundResult = await this.gateway.refundTransaction({
@@ -300,7 +283,6 @@ export class OrderService {
                 reason: dto.reason || "Customer requested cancellation",
               });
 
-              // Update the Payment status to refunded
               await this.paymentRepository.updateStatus(
                 payment.id,
                 "refunded",
@@ -308,7 +290,7 @@ export class OrderService {
                   gatewayData: {
                     ...((payment.gatewayData as Record<string, unknown>) || {}),
                     refundRef: refundResult.refundRef,
-                    refundedAt: new Date(),
+                    refundedAt: new Date().toISOString(),
                   },
                 },
                 trx,
@@ -319,9 +301,7 @@ export class OrderService {
                 "Failed to process refund with Payment Gateway. Order cancellation aborted.",
               );
             }
-          }
-          // 3. Cash on Delivery (COD) payment
-          else if (payment.gateway === "cod") {
+          } else if (payment.gateway === "cod") {
             await this.paymentRepository.updateStatus(
               payment.id,
               "refunded",
@@ -330,7 +310,7 @@ export class OrderService {
                   ...((payment.gatewayData as Record<string, unknown>) || {}),
                   refundedBy: user.userId,
                   refundMethod: "cash",
-                  refundedAt: new Date(),
+                  refundedAt: new Date().toISOString(),
                 },
               },
               trx,
@@ -345,16 +325,13 @@ export class OrderService {
           );
         }
       }
-      // Return back for inventory
+
+      // Restock inventory — the deducted quantity comes back.
       for (const item of order.items) {
-        await trx
-          .updateTable("inventory")
-          .set((eb) => ({
-            quantity: eb("quantity", "+", item.quantity),
-            updated_at: new Date(),
-          }))
-          .where("variant_id", "=", item.variantId)
-          .execute();
+        await trx.inventory.update({
+          where: { variantId: item.variantId },
+          data: { quantity: { increment: item.quantity } },
+        });
       }
 
       await this.orderRepository.updateStatus(
@@ -379,7 +356,6 @@ export class OrderService {
     return (await this.orderRepository.findById(orderId))!;
   }
 
-  // Helpers
   private async createOrderForSeller(
     customerId: string,
     sellerId: string,
@@ -392,30 +368,29 @@ export class OrderService {
     }[],
     dto: CreateOrderDto,
     paymentId: string,
-    trx: any,
+    trx: Prisma.TransactionClient,
   ): Promise<OrderEntity> {
-    // 1. SELECT FOR UPDATE - lock inventory rows
+    // 1. Lock inventory rows
     const variantIds = items.map((i) => i.variantId);
     const lockedInventory = await this.orderRepository.lockInventoryForUpdate(
       variantIds,
       trx,
     );
 
-    // 2. Validate each item - avoid oversell
+    // 2. Validate stock
     for (const item of items) {
       const inv = lockedInventory.find((l) => l.variantId === item.variantId);
       if (!inv)
         throw new NotFoundError(
           `Inventory not found for variant with id ${item.variantId}`,
         );
-
       if (inv.quantity < item.quantity)
         throw new BadRequestError(
           `Not enough stock for "${item.variantSku}". `,
         );
     }
 
-    // 3. Calculate total
+    // 3. Total
     const totalAmount = items.reduce(
       (sum, item) => sum + (item.variantPrice ?? 0) * item.quantity,
       0,
@@ -458,7 +433,7 @@ export class OrderService {
       );
     }
 
-    // 7. Write status log
+    // 7. Status log
     await this.orderRepository.createStatusLog(
       {
         orderId,
@@ -470,21 +445,23 @@ export class OrderService {
       trx,
     );
 
-    // 8. Load and return order
     const order = await this.orderRepository.findById(orderId, trx);
     return order!;
   }
+
   private async getSellerIdByVariantId(variantId: string): Promise<string> {
-    const row = await this.orderRepository.client
-      .selectFrom("product_variants")
-      .innerJoin("products", "products.id", "product_variants.product_id")
-      .select("products.seller_id")
-      .where("product_variants.id", "=", variantId)
-      .executeTakeFirst();
+    const variant = await this.prisma.productVariant.findUnique({
+      where: { id: variantId },
+      select: {
+        product: {
+          select: { sellerId: true, deletedAt: true },
+        },
+      },
+    });
 
-    if (!row)
+    if (!variant?.product || variant.product.deletedAt) {
       throw new NotFoundError(`Variant with id "${variantId}" not found`);
-
-    return row.seller_id;
+    }
+    return variant.product.sellerId;
   }
 }

@@ -1,4 +1,4 @@
-import { OrderRow } from "../../infrastructure/database/db.schema";
+import type { Order } from "@prisma/client";
 import { OrderItemEntity } from "./order-item.entity";
 import { OrderStatusLogEntity } from "./order-status-log.entity";
 
@@ -55,26 +55,26 @@ export class OrderEntity {
   }
 
   static fromDatabase(
-    row: OrderRow,
+    row: Order,
     items: OrderItemEntity[] = [],
     statusLogs: OrderStatusLogEntity[] = [],
   ): OrderEntity {
     return new OrderEntity(
       row.id,
-      row.customer_id,
-      row.seller_id,
+      row.customerId,
+      row.sellerId,
       row.status,
-      Number(row.total_amount),
-      row.shipping_name,
-      row.shipping_phone,
-      row.shipping_address,
+      Number(row.totalAmount),
+      row.shippingName,
+      row.shippingPhone,
+      row.shippingAddress,
       row.note,
-      row.cancelled_reason,
-      row.payment_id || null,
+      row.cancelledReason,
+      row.paymentId ?? null,
       items,
       statusLogs,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.createdAt,
+      row.updatedAt,
     );
   }
 

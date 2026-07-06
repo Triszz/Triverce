@@ -1,4 +1,4 @@
-import { PaymentRow } from "../../infrastructure/database/db.schema";
+import type { Payment } from "@prisma/client";
 
 export type PaymentStatus =
   | "pending"
@@ -47,20 +47,20 @@ export class PaymentEntity {
     return this.status === "paid";
   }
 
-  static fromDatabase(row: PaymentRow, orderIds: string[]): PaymentEntity {
+  static fromDatabase(row: Payment, orderIds: string[]): PaymentEntity {
     return new PaymentEntity(
       row.id,
-      row.customer_id,
+      row.customerId,
       Number(row.amount),
       row.currency,
       row.status,
       row.gateway,
-      row.gateway_ref,
-      row.gateway_data,
-      row.idempotency_key,
+      row.gatewayRef,
+      (row.gatewayData as unknown) ?? null,
+      row.idempotencyKey,
       orderIds,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.createdAt,
+      row.updatedAt,
     );
   }
 

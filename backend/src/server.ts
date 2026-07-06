@@ -1,7 +1,7 @@
 import app from "./app";
 import dotenv from "dotenv";
-import { db } from "./infrastructure/database/db.client";
 import { container } from "./config/container";
+import { prisma } from "./config/prisma";
 
 dotenv.config();
 
@@ -13,9 +13,14 @@ app.listen(PORT, () => {
   logger.info(`Server is running on http://localhost:${PORT}`);
 });
 
-db.selectFrom("users")
-  .select("id")
-  .limit(1)
-  .execute()
-  .then(() => logger.info("Database connected successfully!"))
-  .catch((err) => logger.error(`Database connection failed: ${err.message}`));
+// Smoke-test the database connection at startup using the Prisma singleton.
+// We intentionally run an inexpensive aggregate; replace with a real warmup
+// query if your pooler benefits from one.
+prisma.user
+  .count()
+  .then((count) =>
+    logger.info(`Database connected successfully! (users: ${count})`),
+  )
+  .catch((err: Error) =>
+    logger.error(`Database connection failed: ${err.message}`),
+  );

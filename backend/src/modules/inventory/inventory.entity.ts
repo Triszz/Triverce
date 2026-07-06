@@ -1,4 +1,4 @@
-import { InventoryRow } from "../../infrastructure/database/db.schema";
+import type { Inventory } from "@prisma/client";
 
 export class InventoryEntity {
   constructor(
@@ -10,7 +10,6 @@ export class InventoryEntity {
     public readonly updatedAt: Date,
   ) {}
 
-  // Business rules
   get available(): number {
     const calc = this.quantity - this.reserved;
     return calc > 0 ? calc : 0;
@@ -20,14 +19,14 @@ export class InventoryEntity {
     return this.available > 0;
   }
 
-  static fromDatabase(row: InventoryRow): InventoryEntity {
+  static fromDatabase(row: Inventory): InventoryEntity {
     return new InventoryEntity(
       row.id,
-      row.variant_id,
+      row.variantId,
       row.quantity,
       row.reserved,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.createdAt,
+      row.updatedAt,
     );
   }
 

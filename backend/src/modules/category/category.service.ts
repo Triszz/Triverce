@@ -56,9 +56,9 @@ export class CategoryService {
       name: dto.name,
       slug: dto.slug,
       description: dto.description ?? null,
-      parent_id: dto.parentId ?? null,
-      is_active: dto.isActive,
-      sort_order: dto.sortOrder,
+      parentId: dto.parentId ?? null,
+      isActive: dto.isActive,
+      sortOrder: dto.sortOrder,
     });
   }
 
@@ -103,9 +103,9 @@ export class CategoryService {
       name: dto.name,
       slug: dto.slug,
       description: dto.description,
-      parent_id: dto.parentId,
-      is_active: dto.isActive,
-      sort_order: dto.sortOrder,
+      parentId: dto.parentId,
+      isActive: dto.isActive,
+      sortOrder: dto.sortOrder,
     });
 
     return updated!;

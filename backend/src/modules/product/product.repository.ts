@@ -1,293 +1,158 @@
-import { Kysely, sql } from "kysely";
-import {
-  DatabaseSchema,
-  ProductRow,
-  ProductVariantRow,
-} from "../../infrastructure/database/db.schema";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { ProductEntity } from "./product.entity";
 import {
   ProductVariantEntity,
-  VariantAttribute,
+  type VariantAttribute,
 } from "./product-variant.entity";
-import {
+import type {
   CreateProductDto,
   ProductQuery,
   AddVariantDto,
   UpdateVariantDto,
 } from "./product.dto";
 
+/**
+ * ProductRepository — Prisma-backed.
+ *
+ * Keeps the same public API as the Kysely version.
+ * Uses Prisma interactive transactions (prisma.$transaction(async tx => ...))
+ * for the multi-insert flows that the Kysely version wrapped in
+ * `db.transaction().execute(...)`.
+ */
 export class ProductRepository {
-  constructor(private db: Kysely<DatabaseSchema>) {}
+  constructor(private readonly prisma: PrismaClient) {}
 
-  // Find products
   async findAll(
     query: ProductQuery,
   ): Promise<{ data: ProductEntity[]; total: number }> {
-    let baseQuery = this.db
-      .selectFrom("products")
-      .where("deleted_at", "is", null);
-
-    if (query.categoryId) {
-      baseQuery = baseQuery.where(
-        "category_id",
-        "=",
-        query.categoryId,
-      ) as typeof baseQuery;
-    }
-
-    if (query.isActive !== undefined) {
-      baseQuery = baseQuery.where(
-        "is_active",
-        "=",
-        query.isActive,
-      ) as typeof baseQuery;
-    }
-
+    const where: Prisma.ProductWhereInput = { deletedAt: null };
+    if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.isActive !== undefined) where.isActive = query.isActive;
     if (query.search) {
-      baseQuery = baseQuery.where(
-        "name",
-        "ilike",
-        `%${query.search}%`,
-      ) as typeof baseQuery;
+      where.name = { contains: query.search, mode: "insensitive" };
+    }
+    if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+      where.basePrice = {
+        ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}),
+        ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}),
+      };
     }
 
-    if (query.minPrice !== undefined) {
-      baseQuery = baseQuery.where(
-        "base_price",
-        ">=",
-        query.minPrice,
-      ) as typeof baseQuery;
-    }
+    const sortMap: Record<ProductQuery["sortBy"], Prisma.ProductOrderByWithRelationInput> = {
+      price_asc: { basePrice: "asc" },
+      price_desc: { basePrice: "desc" },
+      name_asc: { name: "asc" },
+      name_desc: { name: "desc" },
+      created_desc: { createdAt: "desc" },
+    };
+    const orderBy = sortMap[query.sortBy] ?? sortMap.created_desc;
 
-    if (query.maxPrice !== undefined) {
-      baseQuery = baseQuery.where(
-        "base_price",
-        "<=",
-        query.maxPrice,
-      ) as typeof baseQuery;
-    }
+    const [total, rows] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        orderBy,
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+    ]);
 
-    // Total count
-    const { count } = await baseQuery
-      .select((eb) => eb.fn.countAll<number>().as("count"))
-      .executeTakeFirstOrThrow();
-
-    // Sort
-    const sortMap = {
-      price_asc: ["base_price", "asc"],
-      price_desc: ["base_price", "desc"],
-      name_asc: ["name", "asc"],
-      name_desc: ["name", "desc"],
-      created_desc: ["created_at", "desc"],
-    } as const;
-
-    const [sortCol, sortDir] = sortMap[query.sortBy] ?? ["created_at", "desc"];
-
-    const rows = (await baseQuery
-      .selectAll()
-      .orderBy(sortCol, sortDir)
-      .limit(query.limit)
-      .offset((query.page - 1) * query.limit)
-      .execute()) as ProductRow[];
-
-    // List page
     return {
       data: rows.map((row) => ProductEntity.fromDatabase(row)),
-      total: Number(count),
+      total,
     };
   }
-  private async loadVariantsWithAttributes(
-    productId: string,
-  ): Promise<ProductVariantEntity[]> {
-    // Query 1: Select variants
-    const variantRows = await this.db
-      .selectFrom("product_variants")
-      .leftJoin("inventory", "inventory.variant_id", "product_variants.id")
-      .select([
-        "product_variants.id",
-        "product_variants.product_id",
-        "product_variants.sku",
-        "product_variants.price",
-        "product_variants.image_url",
-        "product_variants.is_active",
-        "product_variants.created_at",
-        "product_variants.updated_at",
-        sql<number>`inventory.quantity - inventory.reserved`.as("available"),
-      ])
-      .where("product_variants.product_id", "=", productId)
-      .where("product_variants.is_active", "=", true)
-      .orderBy("product_variants.created_at", "asc")
-      .execute();
 
-    if (variantRows.length === 0) return [];
-
-    const variantIds = variantRows.map((v) => v.id);
-
-    // Query 2: Select all attributes of variants
-    const attrRows = await this.db
-      .selectFrom("variant_attribute_values")
-      .innerJoin(
-        "product_attributes",
-        "product_attributes.id",
-        "variant_attribute_values.attribute_id",
-      )
-      .select([
-        "variant_attribute_values.variant_id",
-        "variant_attribute_values.attribute_id",
-        "variant_attribute_values.value",
-        "product_attributes.name as attribute_name",
-      ])
-      .where("variant_attribute_values.variant_id", "in", variantIds)
-      .execute();
-
-    // Group rows based on variant_id because JOIN create some rows for 1 variant
-    const attrsByVariantId = new Map<string, VariantAttribute[]>();
-    for (const attr of attrRows) {
-      if (!attrsByVariantId.has(attr.variant_id)) {
-        attrsByVariantId.set(attr.variant_id, []);
-      }
-      attrsByVariantId.get(attr.variant_id)!.push({
-        attributeId: attr.attribute_id,
-        attributeName: attr.attribute_name,
-        value: attr.value,
-      });
-    }
-
-    // Map to ProductVariantEntity
-    return variantRows.map((row) =>
-      ProductVariantEntity.fromDatabase(
-        row,
-        attrsByVariantId.get(row.id) ?? [],
-      ),
-    );
-  }
-
-  // Find product by id
   async findById(id: string): Promise<ProductEntity | null> {
-    const row = (await this.db
-      .selectFrom("products")
-      .selectAll()
-      .where("id", "=", id)
-      .where("deleted_at", "is", null)
-      .executeTakeFirst()) as ProductRow | undefined;
-
+    const row = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+    });
     if (!row) return null;
 
     const variants = await this.loadVariantsWithAttributes(id);
     return ProductEntity.fromDatabase(row, variants);
   }
 
-  // Find by slug
   async findBySlug(slug: string): Promise<ProductEntity | null> {
-    const row = await this.db
-      .selectFrom("products")
-      .selectAll()
-      .where("slug", "=", slug)
-      .where("deleted_at", "is", null)
-      .executeTakeFirst();
-
+    const row = await this.prisma.product.findFirst({
+      where: { slug, deletedAt: null },
+    });
     if (!row) return null;
 
     const variants = await this.loadVariantsWithAttributes(row.id);
     return ProductEntity.fromDatabase(row, variants);
   }
 
-  // Create product
-  async create(
-    dto: CreateProductDto,
-    sellerId: string,
-  ): Promise<ProductEntity> {
-    return await this.db.transaction().execute(async (trx) => {
-      // 1. Insert product
-      const productRow = (await trx
-        .insertInto("products")
-        .values({
-          seller_id: sellerId,
-          category_id: dto.categoryId ?? null,
+  async create(dto: CreateProductDto, sellerId: string): Promise<ProductEntity> {
+    return this.prisma.$transaction(async (tx) => {
+      const productRow = await tx.product.create({
+        data: {
+          sellerId,
+          categoryId: dto.categoryId ?? null,
           name: dto.name,
           slug: dto.slug,
           description: dto.description ?? null,
-          base_price: dto.basePrice,
-          is_active: dto.isActive,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()) as ProductRow;
+          basePrice: dto.basePrice,
+          isActive: dto.isActive,
+        },
+      });
 
-      // 2. Insert each variant
       const variantEntities: ProductVariantEntity[] = [];
 
       for (const variantDto of dto.variants) {
-        // 2a. Insert variant
-        const variantRow = (await trx
-          .insertInto("product_variants")
-          .values({
-            product_id: productRow.id,
+        const variantRow = await tx.productVariant.create({
+          data: {
+            productId: productRow.id,
             sku: variantDto.sku,
             price: variantDto.price,
-            image_url: variantDto.imageUrl ?? null,
-            is_active: variantDto.isActive,
-          })
-          .returningAll()
-          .executeTakeFirstOrThrow()) as ProductVariantRow;
+            imageUrl: variantDto.imageUrl ?? null,
+            isActive: variantDto.isActive,
+          },
+        });
 
-        // 2b. Insert inventory record for variant
-        await trx
-          .insertInto("inventory")
-          .values({
-            variant_id: variantRow.id,
+        await tx.inventory.create({
+          data: {
+            variantId: variantRow.id,
             quantity: 0,
             reserved: 0,
-          })
-          .execute();
+          },
+        });
 
-        // 2c. Insert attribute values
         const attributes: VariantAttribute[] = [];
+        for (const [attrName, attrValue] of Object.entries(variantDto.attributes)) {
+          const normalized = attrName.toLowerCase();
 
-        for (const [attrName, attrValue] of Object.entries(
-          variantDto.attributes,
-        )) {
-          // Find attribute_id from name - Example: "color" -> uuid
-          const attrRow = await trx
-            .selectFrom("product_attributes")
-            .select(["id", "name"])
-            .where("name", "=", attrName.toLowerCase())
-            .executeTakeFirst();
+          // upsert: create attribute if it doesn't exist
+          const attr = await tx.productAttribute.upsert({
+            where: { name: normalized },
+            update: {},
+            create: { name: normalized },
+          });
 
-          // If attribute does not exist, it will be automatically created
-          const attributeId =
-            attrRow?.id ??
-            (
-              await trx
-                .insertInto("product_attributes")
-                .values({ name: attrName.toLowerCase() })
-                .returning("id")
-                .executeTakeFirstOrThrow()
-            ).id;
-
-          await trx
-            .insertInto("variant_attribute_values")
-            .values({
-              variant_id: variantRow.id,
-              attribute_id: attributeId,
+          await tx.variantAttributeValue.create({
+            data: {
+              variantId: variantRow.id,
+              attributeId: attr.id,
               value: attrValue,
-            })
-            .execute();
+            },
+          });
 
           attributes.push({
-            attributeId,
+            attributeId: attr.id,
             attributeName: attrName,
             value: attrValue,
           });
         }
+
         variantEntities.push(
           ProductVariantEntity.fromDatabase(variantRow, attributes),
         );
       }
+
       return ProductEntity.fromDatabase(productRow, variantEntities);
     });
   }
 
-  // Update product
   async update(
     id: string,
     data: Partial<{
@@ -299,101 +164,90 @@ export class ProductRepository {
       isActive: boolean;
     }>,
   ): Promise<ProductEntity | null> {
-    const updateData: Record<string, unknown> = { updated_at: new Date() };
-
-    if (data.categoryId !== undefined) updateData.category_id = data.categoryId;
+    const updateData: Prisma.ProductUpdateInput = {};
+    if (data.categoryId !== undefined) {
+      updateData.category =
+        data.categoryId === null
+          ? { disconnect: true }
+          : { connect: { id: data.categoryId } };
+    }
     if (data.name !== undefined) updateData.name = data.name;
     if (data.slug !== undefined) updateData.slug = data.slug;
-    if (data.description !== undefined)
-      updateData.description = data.description;
-    if (data.basePrice !== undefined) updateData.base_price = data.basePrice;
-    if (data.isActive !== undefined) updateData.is_active = data.isActive;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.basePrice !== undefined) updateData.basePrice = data.basePrice;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
-    const row = (await this.db
-      .updateTable("products")
-      .set(updateData)
-      .where("id", "=", id)
-      .returningAll()
-      .executeTakeFirst()) as ProductRow | undefined;
-
-    if (!row) return null;
-
-    const variants = await this.loadVariantsWithAttributes(id);
-    return ProductEntity.fromDatabase(row, variants);
+    try {
+      const row = await this.prisma.product.update({ where: { id }, data: updateData });
+      const variants = await this.loadVariantsWithAttributes(id);
+      return ProductEntity.fromDatabase(row, variants);
+    } catch {
+      return null;
+    }
   }
 
-  // Delete product
   async delete(id: string): Promise<boolean> {
-    const result = await this.db
-      .updateTable("products")
-      .set({
-        deleted_at: new Date(),
-        is_active: false,
-        slug: sql`slug || '-' || EXTRACT(EPOCH FROM NOW())`,
-      })
-      .where("id", "=", id)
-      .where("deleted_at", "is", null)
-      .executeTakeFirst();
-
-    return Number(result.numUpdatedRows) > 0;
+    try {
+      // Soft-delete: stamp deletedAt + flip isActive, and rewrite slug to a
+      // unique value (slug || '-' || EXTRACT(EPOCH FROM NOW())) so the
+      // original slug can be reused for a new product.
+      await this.prisma.$executeRaw`
+        UPDATE products
+        SET deleted_at = NOW(),
+            is_active = false,
+            slug = slug || '-' || EXTRACT(EPOCH FROM NOW())::text
+        WHERE id = ${id}::uuid
+          AND deleted_at IS NULL
+      `;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  // Add variant
   async addVariant(
     productId: string,
     dto: AddVariantDto,
   ): Promise<ProductVariantEntity> {
-    return await this.db.transaction().execute(async (trx) => {
-      const variantRow = (await trx
-        .insertInto("product_variants")
-        .values({
-          product_id: productId,
+    return this.prisma.$transaction(async (tx) => {
+      const variantRow = await tx.productVariant.create({
+        data: {
+          productId,
           sku: dto.sku,
           price: dto.price,
-          image_url: dto.imageUrl ?? null,
-          is_active: dto.isActive,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()) as ProductVariantRow;
+          imageUrl: dto.imageUrl ?? null,
+          isActive: dto.isActive,
+        },
+      });
 
-      await trx
-        .insertInto("inventory")
-        .values({
-          variant_id: variantRow.id,
+      await tx.inventory.create({
+        data: {
+          variantId: variantRow.id,
           quantity: 0,
           reserved: 0,
-        })
-        .execute();
+        },
+      });
 
       const attributes: VariantAttribute[] = [];
       for (const [attrName, attrValue] of Object.entries(dto.attributes)) {
-        const attrRow = await trx
-          .selectFrom("product_attributes")
-          .select(["id", "name"])
-          .where("name", "=", attrName.toLowerCase())
-          .executeTakeFirst();
+        const normalized = attrName.toLowerCase();
 
-        const attributeId =
-          attrRow?.id ??
-          (
-            await trx
-              .insertInto("product_attributes")
-              .values({ name: attrName.toLowerCase() })
-              .returning("id")
-              .executeTakeFirstOrThrow()
-          ).id;
+        const attr = await tx.productAttribute.upsert({
+          where: { name: normalized },
+          update: {},
+          create: { name: normalized },
+        });
 
-        await trx
-          .insertInto("variant_attribute_values")
-          .values({
-            variant_id: variantRow.id,
-            attribute_id: attributeId,
+        await tx.variantAttributeValue.create({
+          data: {
+            variantId: variantRow.id,
+            attributeId: attr.id,
             value: attrValue,
-          })
-          .execute();
+          },
+        });
 
         attributes.push({
-          attributeId,
+          attributeId: attr.id,
           attributeName: attrName,
           value: attrValue,
         });
@@ -403,102 +257,151 @@ export class ProductRepository {
     });
   }
 
-  // Update variant
   async updateVariant(
     variantId: string,
     dto: UpdateVariantDto,
   ): Promise<ProductVariantEntity | null> {
-    const updateData: Record<string, unknown> = { updated_at: new Date() };
-
+    const updateData: Prisma.ProductVariantUpdateInput = {};
     if (dto.sku !== undefined) updateData.sku = dto.sku;
     if (dto.price !== undefined) updateData.price = dto.price;
-    if (dto.imageUrl !== undefined) updateData.image_url = dto.imageUrl;
-    if (dto.isActive !== undefined) updateData.is_active = dto.isActive;
+    if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
+    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
-    const row = (await this.db
-      .updateTable("product_variants")
-      .set(updateData)
-      .where("id", "=", variantId)
-      .returningAll()
-      .executeTakeFirst()) as ProductVariantRow | undefined;
+    try {
+      const row = await this.prisma.productVariant.update({
+        where: { id: variantId },
+        data: updateData,
+      });
 
-    if (!row) return null;
+      // Load attributes after update
+      const attrRows = await this.prisma.variantAttributeValue.findMany({
+        where: { variantId },
+        include: { attribute: true },
+      });
 
-    // Load attributes after update
-    const attrRow = await this.db
-      .selectFrom("variant_attribute_values as vav")
-      .innerJoin("product_attributes as pa", "pa.id", "vav.attribute_id")
-      .select(["vav.attribute_id", "pa.name as attribute_name", "vav.value"])
-      .where("vav.variant_id", "=", variantId)
-      .execute();
+      const attributes: VariantAttribute[] = attrRows.map((r) => ({
+        attributeId: r.attributeId,
+        attributeName: r.attribute.name,
+        value: r.value,
+      }));
 
-    const attributes: VariantAttribute[] = attrRow.map((r) => ({
-      attributeId: r.attribute_id,
-      attributeName: r.attribute_name,
-      value: r.value,
-    }));
-
-    return ProductVariantEntity.fromDatabase(row, attributes);
+      return ProductVariantEntity.fromDatabase(row, attributes);
+    } catch {
+      return null;
+    }
   }
 
-  // Delete variant
   async deleteVariant(variantId: string): Promise<boolean> {
-    const result = await this.db
-      .deleteFrom("product_variants")
-      .where("id", "=", variantId)
-      .executeTakeFirst();
-
-    return Number(result.numDeletedRows) > 0;
+    try {
+      await this.prisma.productVariant.delete({ where: { id: variantId } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  // Helpers
   async slugExists(slug: string, excludeId?: string): Promise<boolean> {
-    let query = this.db
-      .selectFrom("products")
-      .select("id")
-      .where("slug", "=", slug);
-
-    if (excludeId) query = query.where("id", "!=", excludeId) as typeof query;
-
-    const row = await query.executeTakeFirst();
-
-    return !!row;
+    const found = await this.prisma.product.findFirst({
+      where: {
+        slug,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    return !!found;
   }
 
   async skuExists(sku: string, excludeVariantId?: string): Promise<boolean> {
-    let query = this.db
-      .selectFrom("product_variants")
-      .select("id")
-      .where("sku", "=", sku);
-
-    if (excludeVariantId)
-      query = query.where("id", "!=", excludeVariantId) as typeof query;
-
-    const row = await query.executeTakeFirst();
-
-    return !!row;
+    const found = await this.prisma.productVariant.findFirst({
+      where: {
+        sku,
+        ...(excludeVariantId ? { NOT: { id: excludeVariantId } } : {}),
+      },
+      select: { id: true },
+    });
+    return !!found;
   }
 
   async countVariants(productId: string): Promise<number> {
-    const { count } = await this.db
-      .selectFrom("product_variants")
-      .select((eb) => eb.fn.countAll<number>().as("count"))
-      .where("product_id", "=", productId)
-      .executeTakeFirstOrThrow();
-
-    return Number(count);
+    return this.prisma.productVariant.count({ where: { productId } });
   }
 
   // Find seller_id from variant_id (Helper for Inventory/Cart)
   async getSellerIdByVariantId(variantId: string): Promise<string | null> {
-    const row = await this.db
-      .selectFrom("product_variants")
-      .innerJoin("products", "products.id", "product_variants.product_id")
-      .select("products.seller_id")
-      .where("product_variants.id", "=", variantId)
-      .where("products.deleted_at", "is", null)
-      .executeTakeFirst();
+    const row = await this.prisma.productVariant.findFirst({
+      where: { id: variantId, product: { deletedAt: null } },
+      select: { product: { select: { sellerId: true } } },
+    });
+    return row?.product.sellerId ?? null;
+  }
 
-    return row?.seller_id ?? null;
+  /**
+   * Loads variants + their attributes + computed `available` stock for a product.
+   *
+   * The `available = quantity - reserved` expression is computed via raw SQL
+   * since Prisma's generated types can't subtract two columns natively.
+   */
+  private async loadVariantsWithAttributes(
+    productId: string,
+  ): Promise<ProductVariantEntity[]> {
+    const variantRows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        productId: string;
+        sku: string;
+        price: import("@prisma/client").Prisma.Decimal;
+        imageUrl: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        available: number | null;
+      }>
+    >`
+      SELECT
+        pv.id,
+        pv.product_id AS "productId",
+        pv.sku,
+        pv.price,
+        pv.image_url AS "imageUrl",
+        pv.is_active AS "isActive",
+        pv.created_at AS "createdAt",
+        pv.updated_at AS "updatedAt",
+        (inv.quantity - inv.reserved) AS available
+      FROM product_variants pv
+      LEFT JOIN inventory inv ON inv.variant_id = pv.id
+      WHERE pv.product_id = ${productId}::uuid
+        AND pv.is_active = true
+      ORDER BY pv.created_at ASC
+    `;
+
+    if (variantRows.length === 0) return [];
+
+    const variantIds = variantRows.map((v) => v.id);
+
+    const attrRows = await this.prisma.variantAttributeValue.findMany({
+      where: { variantId: { in: variantIds } },
+      include: { attribute: true },
+    });
+
+    const attrsByVariantId = new Map<string, VariantAttribute[]>();
+    for (const attr of attrRows) {
+      const list = attrsByVariantId.get(attr.variantId) ?? [];
+      list.push({
+        attributeId: attr.attributeId,
+        attributeName: attr.attribute.name,
+        value: attr.value,
+      });
+      attrsByVariantId.set(attr.variantId, list);
+    }
+
+    return variantRows.map((row) =>
+      ProductVariantEntity.fromDatabase(
+        // Cast through `unknown` because the raw-SQL row is structurally
+        // identical to Prisma's ProductVariant but TS can't infer that.
+        row as unknown as import("./product-variant.entity").ProductVariantRowWithStock,
+        attrsByVariantId.get(row.id) ?? [],
+      ),
+    );
   }
 }

@@ -1,10 +1,9 @@
 import { createContainer, asClass, asValue, InjectionMode } from "awilix";
+import type { PrismaClient } from "@prisma/client";
 import { ILogger } from "../core/interfaces/ILogger";
 import { ConsoleLogger } from "../infrastructure/logger/ConsoleLogger";
-import { db } from "../infrastructure/database/db.client";
+import { prisma } from "./prisma";
 import { UserRepository } from "../modules/user/user.repository";
-import { Kysely } from "kysely";
-import { DatabaseSchema } from "../infrastructure/database/db.schema";
 import { AuthService } from "../modules/auth/auth.service";
 import { AuthController } from "../modules/auth/auth.controller";
 import { CategoryRepository } from "../modules/category/category.repository";
@@ -28,7 +27,7 @@ import { PaymentRepository } from "../modules/payment/payment.repository";
 import { PaymentService } from "../modules/payment/payment.service";
 import { PaymentController } from "../modules/payment/payment.controller";
 import { MockPaymentAdapter } from "../modules/payment/adapters/mock.adapter";
-import { IPaymentGateway } from "../modules/payment/payment.interface";
+import type { IPaymentGateway } from "../modules/payment/payment.interface";
 import { WebhookService } from "../modules/webhook/webhook.service";
 import { WebhookController } from "../modules/webhook/webhook.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
@@ -41,10 +40,16 @@ const momoConfig = {
   ipnUrl: process.env.MOMO_IPN_URL as string,
 };
 
-// Định nghĩa interface cho container
+// Awilix DI container — Prisma-injected.
+//
+// The previous Kysely-based `db: Kysely<DatabaseSchema>` is replaced by
+// `prisma: PrismaClient`. All repositories now take `PrismaClient`
+// instead of `Kysely<DatabaseSchema>` in their constructor.
+// Services/controllers are unaware of the swap.
 export interface ICradle {
   logger: ILogger;
-  db: Kysely<DatabaseSchema>;
+  prisma: PrismaClient;
+
   // User
   userRepository: UserRepository;
   // Auth
@@ -89,7 +94,7 @@ const container = createContainer<ICradle>({
 
 container.register({
   logger: asClass(ConsoleLogger).singleton(),
-  db: asValue(db),
+  prisma: asValue(prisma),
   // User
   userRepository: asClass(UserRepository).scoped(),
   // Auth
