@@ -64,15 +64,20 @@ export class ProductEntity {
   }
 
   toPublicSummary() {
+    const imageUrl = this.variants.length > 0
+      ? (this.variants.find((v) => v.isActive) ?? this.variants[0]).imageUrl ?? null
+      : null;
     return {
       id: this.id,
       sellerId: this.sellerId,
+      categoryId: this.categoryId,
       name: this.name,
       slug: this.slug,
       basePrice: this.basePrice,
       minPrice: this.getMinPrice(),
       maxPrice: this.getMaxPrice(),
       isActive: this.isActive,
+      imageUrl,
     };
   }
 

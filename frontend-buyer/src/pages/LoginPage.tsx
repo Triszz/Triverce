@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { isAxiosError } from 'axios';
 import { authService } from '../services/authService';
-import { useAuthStore } from '../store/useAuthStore';
+import { useAuthStore } from '../stores/useAuthStore';
 
 export function LoginPage() {
   const navigate = useNavigate();

@@ -1,11 +1,58 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Design tokens (extended under Tailwind v4 @theme)
+ *   • All brand-* shades are added without changing the existing
+ *     `--color-brand: #002b5b` mapping used by legacy Tailwind classes.
+ *   • The hex `#002b5b` is the brand-800 in this scale — keep the legacy
+ *     token name so existing inline classes (`bg-[#002b5b]`) keep working.
+ * ────────────────────────────────────────────────────────────────────────── */
 @theme {
+  /* Existing tokens (do not remove — referenced by inline classes) */
   --color-brand: #002b5b;
   --color-brand-light: #1d4ed8;
   --color-surface: #ffffff;
   --color-background: #f8fafc;
 
+  /* Brand scale (indigo-deep). The legacy `--color-brand` is `brand-800`. */
+  --color-brand-50:  #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #002b5b;
+  --color-brand-900: #1e1b4b;
+
+  /* Semantic tones */
+  --color-success-50:  #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  --color-warning-50:  #fffbeb;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  --color-danger-50:  #fef2f2;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  --color-info-50:  #eff6ff;
+  --color-info-500: #3b82f6;
+  --color-info-600: #2563eb;
+  --color-info-700: #1d4ed8;
+
+  /* Radii used by UI primitives */
+  --radius-card: 0.75rem;  /* 12px - rounded-xl */
+  --radius-pill: 9999px;
+
+  /* Fonts */
   --font-sans: "DM Sans", "Inter", system-ui, sans-serif;
   --font-heading: "DM Sans", "Inter", system-ui, sans-serif;
 }

@@ -57,10 +57,81 @@ export class ProductRepository {
       }),
     ]);
 
+    // For each product, attach the cheapest active variant so ProductCard
+    // can render a hero image. Single bulk query (no N+1).
+    const productIds = rows.map((r) => r.id);
+    const variantByProduct = await this.loadCheapestVariantImage(productIds);
+
     return {
-      data: rows.map((row) => ProductEntity.fromDatabase(row)),
+      data: rows.map((row) => {
+        const variant = variantByProduct.get(row.id);
+        // Pass the cheapest variant down to fromDatabase so the entity's
+        // getMinPrice/getMaxPrice/toPublicSummary have the data they need.
+        return ProductEntity.fromDatabase(
+          row,
+          variant ? [variant] : [],
+        );
+      }),
       total,
     };
+  }
+
+  /**
+   * Bulk-load the cheapest active variant per product so listing endpoints
+   * can surface a hero image and accurate price bounds without N+1 queries.
+   * Uses `DISTINCT ON` (Postgres) to grab the lowest-priced variant per
+   * product_id in a single round trip.
+   */
+  private async loadCheapestVariantImage(
+    productIds: string[],
+  ): Promise<Map<string, ProductVariantEntity>> {
+    const result = new Map<string, ProductVariantEntity>();
+    if (productIds.length === 0) return result;
+
+    interface RawVariant {
+      productId: string;
+      variantId: string;
+      sku: string;
+      price: Prisma.Decimal;
+      imageUrl: string | null;
+      isActive: boolean;
+      createdAt: Date;
+    }
+
+    const rows = await this.prisma.$queryRaw<RawVariant[]>`
+      SELECT DISTINCT ON (product_id)
+        product_id AS "productId",
+        id          AS "variantId",
+        sku,
+        price,
+        image_url  AS "imageUrl",
+        is_active  AS "isActive",
+        created_at AS "createdAt"
+      FROM product_variants
+      WHERE product_id = ANY(${productIds}::uuid[])
+        AND is_active = true
+      ORDER BY product_id, price ASC, created_at ASC
+    `;
+
+    for (const row of rows) {
+      const variantRow = {
+        id: row.variantId,
+        productId: row.productId,
+        sku: row.sku,
+        price: row.price,
+        imageUrl: row.imageUrl,
+        isActive: row.isActive,
+        createdAt: row.createdAt,
+        updatedAt: row.createdAt,
+      };
+      result.set(
+        row.productId,
+        ProductVariantEntity.fromDatabase(
+          variantRow as unknown as import("./product-variant.entity").ProductVariantRowWithStock,
+        ),
+      );
+    }
+    return result;
   }
 
   async findById(id: string): Promise<ProductEntity | null> {

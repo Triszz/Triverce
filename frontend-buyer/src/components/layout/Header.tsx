@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { User, Package, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "../common/Logo";
-import { useAuthStore } from "../../store/useAuthStore";
+import { useAuthStore } from "../../stores/useAuthStore";
 import { authService } from "../../services/authService";
 
 function Header() {
