@@ -23,6 +23,17 @@ export interface LoginPayload {
   password: string;
 }
 
+/** Payload accepted by `PATCH /auth/me/profile` (mirrors backend `UpdateProfileDto`). */
+export interface UpdateProfilePayload {
+  fullName: string;
+}
+
+/** Payload accepted by `PATCH /auth/me/password` (mirrors backend `ChangePasswordDto`). */
+export interface ChangePasswordPayload {
+  oldPassword: string;
+  newPassword: string;
+}
+
 // ── API response envelopes (mirrors backend controller responses) ────────────
 interface ApiSuccess<T> {
   success: true;
@@ -96,5 +107,41 @@ export const authService = {
       '/auth/logout',
       {},
     );
+  },
+
+  /**
+   * PATCH /auth/me/profile
+   * Backend: 200 { success: true, data: UserPublic }
+   *
+   * Returns the freshly-updated user — the caller is expected to push
+   * that object back into `useAuthStore` so the Header / AccountPage
+   * (and any other consumer) reflect the new name without a refresh.
+   */
+  updateProfile: async (
+    payload: UpdateProfilePayload,
+  ): Promise<UserPublic> => {
+    const { data } = await apiClient.patch<
+      ApiSuccess<UserPublic>
+    >('/auth/me/profile', payload);
+    if (!data.success) throw new Error('Profile update failed');
+    return data.data;
+  },
+
+  /**
+   * PATCH /auth/me/password
+   * Backend: 200 { success: true, message: "Password updated successfully" }
+   *
+   * Returns void — there is no new data to surface on a successful
+   * password change. The 401 path is meaningful: it means the
+   * `oldPassword` was wrong, so the caller should keep the user on the
+   * form and surface a toast.
+   */
+  changePassword: async (
+    payload: ChangePasswordPayload,
+  ): Promise<void> => {
+    const { data } = await apiClient.patch<
+      ApiSuccess<{ message: string }>
+    >('/auth/me/password', payload);
+    if (!data.success) throw new Error('Password change failed');
   },
 };

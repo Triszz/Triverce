@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { isAxiosError } from "axios";
 import { authService } from "../services/authService";
+import { PageMeta } from "@/components/common/PageMeta";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -45,6 +46,10 @@ export function RegisterPage() {
 
   return (
     <div className="space-y-6">
+      <PageMeta
+        title="Create your account"
+        description="Sign up for a Triverce account to checkout faster, track orders, and save your favourites."
+      />
       <div>
         <h2 className="text-2xl font-bold text-slate-900">
           Create your account

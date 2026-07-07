@@ -26,11 +26,11 @@ import { OrderController } from "../modules/order/order.controller";
 import { PaymentRepository } from "../modules/payment/payment.repository";
 import { PaymentService } from "../modules/payment/payment.service";
 import { PaymentController } from "../modules/payment/payment.controller";
-import { MockPaymentAdapter } from "../modules/payment/adapters/mock.adapter";
 import type { IPaymentGateway } from "../modules/payment/payment.interface";
 import { WebhookService } from "../modules/webhook/webhook.service";
 import { WebhookController } from "../modules/webhook/webhook.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
+import { VNPayAdapter } from "../modules/payment/adapters/vnpay.adapter";
 
 const momoConfig = {
   partnerCode: process.env.MOMO_PARTNER_CODE as string,
@@ -38,6 +38,13 @@ const momoConfig = {
   secretKey: process.env.MOMO_SECRET_KEY as string,
   apiUrl: process.env.MOMO_API_URL as string,
   ipnUrl: process.env.MOMO_IPN_URL as string,
+};
+
+const vnpayConfig = {
+  tmnCode: process.env.VNP_TMN_CODE ?? "",
+  hashSecret: process.env.VNP_HASH_SECRET ?? "",
+  payUrl:
+    process.env.VNP_URL ?? "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
 };
 
 // Awilix DI container — Prisma-injected.
@@ -127,7 +134,7 @@ container.register({
   paymentRepository: asClass(PaymentRepository).scoped(),
   paymentService: asClass(PaymentService).scoped(),
   paymentController: asClass(PaymentController).scoped(),
-  gateway: asValue(new MockPaymentAdapter()), // Production: change new MockPaymentAdapter() to new MoMoAdapter(momoConfig)
+  gateway: asValue(new VNPayAdapter(vnpayConfig)),
   // Webhook
   webhookService: asClass(WebhookService).scoped(),
   webhookController: asClass(WebhookController).scoped(),

@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.10.0",
     "@tanstack/react-query": "^5.101.2",
     "axios": "^1.7.9",
     "class-variance-authority": "^0.7.1",
@@ -17,9 +18,11 @@
     "lucide-react": "^1.21.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-hook-form": "^7.81.0",
     "react-router-dom": "^7.6.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
+    "zod": "^3.25.76",
     "zustand": "^5.0.5"
   },
   "devDependencies": {

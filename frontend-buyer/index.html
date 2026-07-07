@@ -4,7 +4,29 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Triverce</title>
+
+    <!-- Default SEO — every page overrides <title> + description via <PageMeta>. -->
+    <title>Triverce — Premium multi-vendor marketplace</title>
+    <meta
+      name="description"
+      content="Shop curated essentials from independent sellers worldwide. Audio gear, apparel, and accessories — handpicked, fairly priced, delivered to your door."
+    />
+    <meta name="theme-color" content="#002b5b" />
+    <meta name="color-scheme" content="light" />
+
+    <!-- Open Graph / link previews. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Triverce" />
+    <meta
+      property="og:description"
+      content="Shop curated essentials from independent sellers worldwide. Audio gear, apparel, and accessories — handpicked, fairly priced, delivered to your door."
+    />
+
+    <!-- Font preconnect. We ship the system font stack today (see index.css
+         --font-sans), but we still preconnect to Google Fonts so swapping
+         in a web font later is a one-line CSS change with no extra latency. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>
     <div id="root"></div>

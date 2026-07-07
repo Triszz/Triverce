@@ -1,5 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthService } from "./auth.service";
+import {
+  UpdateProfileDto,
+  ChangePasswordDto,
+} from "./auth.dto";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -56,5 +60,46 @@ export class AuthController {
     res
       .status(200)
       .json({ success: true, message: "Logged out successfully!" });
+  };
+
+  // ── Self-service account management ────────────────────────────────────
+  // Both routes sit behind `authenticate` (see auth.route.ts) so we
+  // know `req.user` is populated. The controllers only need to forward
+  // the request to the service.
+
+  /** PATCH /api/auth/me/profile — update the authenticated user's fullName. */
+  updateProfile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const updated = await this.authService.updateProfile(
+        req.user!.userId,
+        req.body as UpdateProfileDto,
+      );
+      res.status(200).json({ success: true, data: updated });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** PATCH /api/auth/me/password — change the authenticated user's password. */
+  changePassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      await this.authService.changePassword(
+        req.user!.userId,
+        req.body as ChangePasswordDto,
+      );
+      res
+        .status(200)
+        .json({ success: true, message: "Password updated successfully" });
+    } catch (error) {
+      next(error);
+    }
   };
 }

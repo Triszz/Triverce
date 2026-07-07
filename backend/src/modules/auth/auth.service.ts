@@ -5,8 +5,14 @@ import {
   ConflictError,
   UnauthorizedError,
   ForbiddenError,
+  NotFoundError,
 } from "../../core/errors/AppError";
-import { RegisterDto, LoginDto } from "./auth.dto";
+import {
+  RegisterDto,
+  LoginDto,
+  UpdateProfileDto,
+  ChangePasswordDto,
+} from "./auth.dto";
 
 export interface JwtPayload {
   userId: string;
@@ -112,6 +118,70 @@ export class AuthService {
       };
     } catch (error) {
       throw new UnauthorizedError("Invalid or expired refresh token");
+    }
+  }
+
+  // ── Account self-management ─────────────────────────────────────────────
+  // These power the buyer Account page. Both methods require an already
+  // authenticated user (the controller sits behind `authenticate`); the
+  // service itself trusts the `userId` it receives.
+
+  /**
+   * Update the user's own profile. Email / role are intentionally NOT
+   * editable here — changing them is a different workflow (email
+   * verification, role promotion) that we don't ship yet.
+   */
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+    const updated = await this.userRepository.update(userId, {
+      fullName: dto.fullName,
+    });
+    if (!updated) {
+      throw new NotFoundError("User not found");
+    }
+    return updated.toPublic();
+  }
+
+  /**
+   * Change the user's password.
+   *
+   * Verifies the old password against the stored hash, then hashes the
+   * new one with the same salt cost as registration. We never return the
+   * user object here — password changes don't need to surface any new
+   * data, and avoiding the round-trip keeps the endpoint snappy.
+   *
+   * Throws:
+   *   • NotFoundError    — the userId no longer exists
+   *   • UnauthorizedError — the old password doesn't match
+   */
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    const isOldPasswordValid = await bcrypt.compare(
+      dto.oldPassword,
+      user.passwordHash,
+    );
+    if (!isOldPasswordValid) {
+      throw new UnauthorizedError("Current password is incorrect");
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(dto.newPassword, salt);
+
+    const updated = await this.userRepository.update(userId, {
+      passwordHash,
+    });
+    if (!updated) {
+      throw new NotFoundError("User not found");
     }
   }
 }

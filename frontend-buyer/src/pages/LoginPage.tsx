@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { isAxiosError } from 'axios';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/useAuthStore';
+import { PageMeta } from '@/components/common/PageMeta';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -38,6 +39,10 @@ export function LoginPage() {
 
   return (
     <div className="space-y-6">
+      <PageMeta
+        title="Sign in"
+        description="Sign in to your Triverce account to continue shopping, view orders, and manage your cart."
+      />
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Sign in to your account</h2>
         <p className="mt-1 text-sm text-slate-500">

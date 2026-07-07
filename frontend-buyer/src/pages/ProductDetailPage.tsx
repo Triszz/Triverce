@@ -11,11 +11,14 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { PriceTag } from '@/components/ui/PriceTag';
+import { PageMeta } from '@/components/common/PageMeta';
 import { productService, type ProductVariant } from '@/services/productService';
 import {
   VariantPicker,
   StockBadge,
 } from '@/features/catalog/components/VariantPicker';
+import { useCart } from '@/hooks/useCart';
+import { useUiStore } from '@/stores/useUiStore';
 
 /**
  * ProductDetailPage — slug-routed (`/product/:slug`).
@@ -24,8 +27,9 @@ import {
  * The active variant is local component state — selecting a variant updates
  * the displayed image, price, and stock badge instantly.
  *
- * Add-to-Cart is a mocked log+toast for now. Wiring to the real cart store
- * lands in Step 8.
+ * Add-to-Cart is wired to `useCart.addItem`. On a successful mutation the
+ * cart drawer slides open so the user can see their item and proceed
+ * to checkout; 4xx errors (e.g. out-of-stock) surface as Sonner toasts.
  */
 export function ProductDetailPage() {
   const navigate = useNavigate();
@@ -41,6 +45,11 @@ export function ProductDetailPage() {
     },
     enabled: !!slug,
   });
+
+  // Cart hook — gives us `addItem` + `isAdding` loading flag.
+  const { addItem, isAdding } = useCart();
+  // Drawer control — open the slide-over on a successful add.
+  const openCartDrawer = useUiStore((s) => s.openCartDrawer);
 
   // Default to the first active variant once data lands.
   const firstVariantId = useMemo<string | null>(() => {
@@ -66,23 +75,31 @@ export function ProductDetailPage() {
   /* ── UI ──────────────────────────────────────────────────────────────── */
 
   if (productQuery.isLoading) {
-    return <DetailSkeleton />;
+    return (
+      <>
+        <PageMeta title="Loading product…" />
+        <DetailSkeleton />
+      </>
+    );
   }
 
   if (productQuery.isError || !product) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center space-y-4">
-        <h1 className="text-2xl font-bold text-slate-900">
-          Product not found
-        </h1>
-        <p className="text-slate-500">
-          We couldn't find that product. It may have been removed or the link
-          is incorrect.
-        </p>
-        <Button variant="primary" onClick={() => navigate('/shop')}>
-          Back to shop
-        </Button>
-      </div>
+      <>
+        <PageMeta title="Product not found" />
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">
+            Product not found
+          </h1>
+          <p className="text-slate-500">
+            We couldn't find that product. It may have been removed or the link
+            is incorrect.
+          </p>
+          <Button variant="primary" onClick={() => navigate('/shop')}>
+            Back to shop
+          </Button>
+        </div>
+      </>
     );
   }
 
@@ -92,24 +109,30 @@ export function ProductDetailPage() {
     selectedVariant?.stockStatus === 'out_of_stock' ||
     !selectedVariant?.isActive;
 
-  const canAddToCart = !!selectedVariant && !isOutOfStock;
+  const canAddToCart =
+    !!selectedVariant && !isOutOfStock && !isAdding;
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!selectedVariant) return;
-    // TODO (Step 8): wire to real Cart store.
-    console.info('[mock] add to cart', {
-      productId: product.id,
-      productSlug: product.slug,
-      variantId: selectedVariant.id,
-      sku: selectedVariant.sku,
-      quantity: 1,
-    });
-    toast.success(`Added "${product.name}" (${selectedVariant.sku}) to cart`);
+    try {
+      await addItem({ variantId: selectedVariant.id, quantity: 1 });
+      toast.success(
+        `Added "${product.name}" (${selectedVariant.sku}) to cart`,
+      );
+      openCartDrawer();
+    } catch {
+      // useCart already toasted the error (auth or stock message).
+    }
   };
 
   const heroImage = selectedVariant?.imageUrl ?? null;
 
   return (
+    <>
+      <PageMeta
+        title={product.name}
+        description={product.description ?? `View ${product.name} on Triverce.`}
+      />
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
       {/* Back link */}
       <button
@@ -130,6 +153,12 @@ export function ProductDetailPage() {
                 key={heroImage /* force re-mount on image swap */}
                 src={heroImage}
                 alt={product.name}
+                // The hero is the LCP element on this page — load it
+                // eagerly with high priority. Lazy-loading the LCP
+                // image hurts both LCP and Lighthouse.
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
                 className="h-full w-full object-cover transition-opacity duration-300"
               />
             ) : (
@@ -157,6 +186,7 @@ export function ProductDetailPage() {
                     <img
                       src={v.imageUrl}
                       alt={v.sku}
+                      loading="lazy"
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -217,11 +247,12 @@ export function ProductDetailPage() {
               variant="primary"
               size="lg"
               fullWidth
+              isLoading={isAdding}
               disabled={!canAddToCart}
               onClick={handleAddToCart}
               leftIcon={<ShoppingBag size={18} aria-hidden />}
             >
-              {isOutOfStock ? 'Out of stock' : 'Add to cart'}
+              {isOutOfStock ? 'Out of stock' : isAdding ? 'Adding…' : 'Add to cart'}
             </Button>
 
             {/* Trust badges */}
@@ -239,6 +270,7 @@ export function ProductDetailPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

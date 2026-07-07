@@ -20,6 +20,7 @@ export interface MoMoConfig {
 }
 
 export class MoMoAdapter implements IPaymentGateway {
+  readonly gatewayName = "momo" as const;
   constructor(private config: MoMoConfig) {}
 
   // Create payment session

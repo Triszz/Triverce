@@ -26,6 +26,7 @@ export class WebhookService {
   ) {}
 
   async handlePaymentWebhook(
+    gateway: "vnpay" | "momo",
     rawBody: Buffer,
     signature: string,
   ): Promise<void> {
@@ -37,7 +38,7 @@ export class WebhookService {
       const isNew = await this.paymentRepository.saveWebhookEvent(
         {
           id: gatewayRef,
-          gateway: "mock",
+          gateway,
           eventType: `payment.${status}`,
           payload: rawData,
         },

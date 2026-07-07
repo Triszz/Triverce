@@ -7,6 +7,8 @@ export interface CreateSessionParams {
   description?: string;
 }
 
+export type PaymentGatewayName = "vnpay" | "momo" | "stripe" | "mock";
+
 export interface GatewaySession {
   gatewayRef: string; // MoMo requestId
   paymentUrl: string; // URL redirect for client

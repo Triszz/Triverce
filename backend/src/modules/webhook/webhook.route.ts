@@ -13,10 +13,11 @@ export const createWebhookRouter = (controller: WebhookController) => {
     controller.handleMoMoWebhook,
   );
 
-  // Only enable during development/testing
-  if (process.env.NODE_ENV !== "production") {
-    router.post("/mock", express.json(), controller.handleMockWebhook);
-  }
+  router.post(
+    "/vnpay",
+    express.urlencoded({ extended: false }),
+    controller.handleVNPayWebhook,
+  );
 
   return router;
 };

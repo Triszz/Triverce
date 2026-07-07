@@ -142,6 +142,85 @@ export class PaymentService {
     });
   }
 
+  /**
+   * Handle the VNPay browser return-URL callback.
+   *
+   * The frontend's PaymentReturnPage posts the raw query params it got
+   * from VNPay here so we can:
+   *   1. Verify the HMAC SHA512 signature.
+   *   2. Read vnp_ResponseCode / vnp_TransactionStatus.
+   *   3. Flip the payment to `paid` (or `failed` / `cancelled`) and
+   *      cascade to the related orders.
+   *
+   * Idempotent: if the payment is already in a terminal state we skip
+   * the cascade.
+   */
+  async handleVnpayReturn(
+    paymentId: string,
+    customerId: string,
+    params: Record<string, string>,
+  ): Promise<{ status: PaymentStatus; valid: boolean }> {
+    if (this.gateway.gatewayName !== "vnpay") {
+      throw new BadRequestError(
+        "Active payment gateway is not VNPay — return handler unavailable",
+      );
+    }
+
+    const payment = await this.paymentRepository.findById(paymentId);
+    if (!payment)
+      throw new NotFoundError(`Payment with id "${paymentId}" not found`);
+    if (payment.customerId !== customerId)
+      throw new ForbiddenError("Access denied");
+    if (payment.gateway !== "vnpay") {
+      throw new BadRequestError(
+        `Payment "${paymentId}" is not a VNPay payment (gateway=${payment.gateway})`,
+      );
+    }
+
+    // Already terminal? Nothing to do, but report the canonical status.
+    if (payment.status !== "pending") {
+      return { status: payment.status, valid: true };
+    }
+
+    // `verifyReturnParams` is optional on the interface; the concrete
+    // VNPay adapter always implements it, but we type-guard for the
+    // case where someone wires in a gateway that doesn't.
+    if (typeof this.gateway.verifyReturnParams !== "function") {
+      throw new BadRequestError(
+        "Active payment gateway does not support browser-return verification",
+      );
+    }
+    const verdict = this.gateway.verifyReturnParams(params);
+    if (!verdict.valid) {
+      // Reject the callback outright — don't trust unsigned payloads.
+      throw new BadRequestError("Invalid VNPay signature");
+    }
+
+    await this.prisma.$transaction(async (trx) => {
+      await this.paymentRepository.updateStatus(
+        paymentId,
+        verdict.status,
+        {
+          gatewayData: {
+            vnp_TxnRef: params.vnp_TxnRef,
+            vnp_TransactionNo: params.vnp_TransactionNo,
+            vnp_ResponseCode: params.vnp_ResponseCode,
+            vnp_TransactionStatus: params.vnp_TransactionStatus,
+            vnp_Amount: params.vnp_Amount,
+            vnp_BankCode: params.vnp_BankCode,
+            vnp_PayDate: params.vnp_PayDate,
+            raw: params,
+          },
+        },
+        trx,
+      );
+
+      await this.updateRelatedOrders(paymentId, verdict.status, trx);
+    });
+
+    return { status: verdict.status, valid: true };
+  }
+
   private async updateRelatedOrders(
     paymentId: string,
     paymentStatus: PaymentStatus,

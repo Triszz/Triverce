@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { SearchX, RotateCcw } from 'lucide-react';
 import { categoryService } from '@/services/categoryService';
 import { productService } from '@/services/productService';
 import {
@@ -7,6 +9,8 @@ import {
   EMPTY_FILTERS,
 } from '@/features/catalog/components/ProductFilters';
 import { ProductGrid } from '@/features/catalog/components/ProductGrid';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageMeta } from '@/components/common/PageMeta';
 import { useCatalogFilters } from '@/features/catalog/hooks/useCatalogFilters';
 
 /**
@@ -16,6 +20,7 @@ import { useCatalogFilters } from '@/features/catalog/hooks/useCatalogFilters';
  * bookmarked and shared. We forward `filters` straight into `productService.list`.
  */
 export function ShopPage() {
+  const navigate = useNavigate();
   const { filters, setFilters } = useCatalogFilters();
 
   /* Categories are loaded once and shared with the filter pills. */
@@ -51,6 +56,11 @@ export function ShopPage() {
   const products = productsQuery.data?.data ?? [];
 
   return (
+    <>
+      <PageMeta
+        title="Shop all products"
+        description="Browse products from independent sellers. Filter by category, price, and more."
+      />
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
       <header className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
@@ -76,21 +86,38 @@ export function ShopPage() {
         skeletonCount={8}
         emptyState={
           filters === EMPTY_FILTERS ? (
-            <p className="text-sm text-slate-500">
-              No products available yet.
-            </p>
+            <EmptyState
+              tone="brand"
+              icon={<SearchX size={28} aria-hidden />}
+              title="No products available yet"
+              description="We're onboarding new sellers every day. Check back soon, or start shopping from our latest arrivals on the home page."
+              actions={[
+                {
+                  label: 'Start shopping',
+                  onClick: () => navigate('/'),
+                  variant: 'primary',
+                },
+              ]}
+            />
           ) : (
-            <div className="space-y-2">
-              <p className="text-base font-semibold text-slate-900">
-                Nothing matches those filters
-              </p>
-              <p className="text-sm text-slate-500">
-                Try removing a filter or broadening your price range.
-              </p>
-            </div>
+            <EmptyState
+              tone="neutral"
+              icon={<SearchX size={28} aria-hidden />}
+              title="Nothing matches those filters"
+              description="Try removing a filter or broadening your price range to see more results."
+              actions={[
+                {
+                  label: 'Clear filters',
+                  onClick: () => setFilters(EMPTY_FILTERS),
+                  variant: 'primary',
+                  leftIcon: <RotateCcw size={14} aria-hidden />,
+                },
+              ]}
+            />
           )
         }
       />
     </div>
+    </>
   );
 }

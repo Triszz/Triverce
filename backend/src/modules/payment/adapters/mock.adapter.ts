@@ -9,6 +9,7 @@ import {
 } from "../payment.types";
 
 export class MockPaymentAdapter implements IPaymentGateway {
+  readonly gatewayName = "mock" as const;
   async createSession(params: CreateSessionParams): Promise<GatewaySession> {
     // Returns a fake URL — frontend redirects here for "payment"
     return {

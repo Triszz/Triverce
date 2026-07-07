@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { User, Package, LogOut } from "lucide-react";
+import { User, Package, LogOut, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "../common/Logo";
 import { useAuthStore } from "../../stores/useAuthStore";
+import { useUiStore } from "../../stores/useUiStore";
+import { useCart } from "../../hooks/useCart";
 import { authService } from "../../services/authService";
+import { cn } from "@/lib/cn";
 
 function Header() {
   const navigate = useNavigate();
   const { isAuthenticated, user, clearAuth } = useAuthStore();
+  const openCartDrawer = useUiStore((s) => s.openCartDrawer);
+  const { totalItems } = useCart();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -102,29 +107,26 @@ function Header() {
               Shop
             </Link>
 
-            <Link
-              to="/cart"
-              className="relative text-slate-600 hover:text-[#002b5b] transition-colors p-2 rounded-lg hover:bg-slate-50"
-              aria-label="Cart"
+            <button
+              type="button"
+              onClick={openCartDrawer}
+              aria-label={`Open cart (${totalItems} ${totalItems === 1 ? 'item' : 'items'})`}
+              className="relative text-slate-600 hover:text-[#002b5b] transition-colors p-2 rounded-lg hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b]"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
-                />
-              </svg>
-              {/* Cart badge — shown when cart has items */}
-              <span className="absolute -top-0.5 -right-0.5 bg-[#002b5b] text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center leading-none">
-                0
-              </span>
-            </Link>
+              <ShoppingCart size={20} aria-hidden />
+              {/* Cart badge — only rendered when cart has items */}
+              {totalItems > 0 && (
+                <span
+                  className={cn(
+                    "absolute -top-0.5 -right-0.5 bg-[#002b5b] text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center leading-none ring-2 ring-white",
+                    totalItems > 99 && "px-1.5",
+                  )}
+                  aria-hidden
+                >
+                  {totalItems > 99 ? '99+' : totalItems}
+                </span>
+              )}
+            </button>
 
             {!isAuthenticated ? (
               <>
@@ -180,6 +182,15 @@ function Header() {
                     >
                       <Package size={15} className="text-slate-400 shrink-0" />
                       My Orders
+                    </Link>
+
+                    <Link
+                      to="/cart"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <ShoppingCart size={15} className="text-slate-400 shrink-0" />
+                      My Cart
                     </Link>
 
                     <div className="border-t border-slate-100 my-1" />
