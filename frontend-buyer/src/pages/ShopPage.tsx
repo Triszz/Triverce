@@ -4,10 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { SearchX, RotateCcw } from 'lucide-react';
 import { categoryService } from '@/services/categoryService';
 import { productService } from '@/services/productService';
-import {
-  ProductFilters,
-  EMPTY_FILTERS,
-} from '@/features/catalog/components/ProductFilters';
+import { ProductFilters } from '@/features/catalog/components/ProductFilters';
+import { EMPTY_FILTERS } from '@/features/catalog/components/ProductFilters.constants';
 import { ProductGrid } from '@/features/catalog/components/ProductGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageMeta } from '@/components/common/PageMeta';

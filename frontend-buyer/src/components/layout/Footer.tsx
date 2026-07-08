@@ -3,15 +3,14 @@ import { Link } from 'react-router-dom';
 const FOOTER_LINKS = {
   Shop: [
     { label: 'All Products', href: '/shop' },
-    { label: 'Categories', href: '/categories' },
-    { label: 'Featured Sellers', href: '/sellers' },
-    { label: 'New Arrivals', href: '/shop?sort=newest' },
+    { label: 'New Arrivals', href: '/shop?sort=created_desc' },
+    { label: 'Featured Sellers', href: '/shop' },
   ],
   Support: [
-    { label: 'Help Center', href: '/help' },
+    { label: 'Contact Us', href: '/contact' },
     { label: 'Shipping Info', href: '/shipping' },
     { label: 'Returns & Refunds', href: '/returns' },
-    { label: 'Contact Us', href: '/contact' },
+    { label: 'FAQ', href: '/contact' },
   ],
   Company: [
     { label: 'About Triverce', href: '/about' },

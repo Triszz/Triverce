@@ -114,21 +114,31 @@ export function useCart(): UseCartResult {
    * Axios errors carry the backend envelope in `error.response.data`.
    * For everything else we fall back to the message; otherwise the user
    * sees a generic "Network error".
+   *
+   * The "Not enough stock" case is intercepted here so we return a
+   * friendly, consistent message instead of the raw backend detail.
    */
   const formatError = (err: unknown): string => {
     const anyErr = err as {
       response?: { data?: { message?: string } };
       message?: string;
     };
-    return (
+    const raw =
       anyErr?.response?.data?.message ??
       anyErr?.message ??
-      'Something went wrong. Please try again.'
-    );
+      'Something went wrong. Please try again.';
+
+    if (raw.toLowerCase().includes('not enough stock')) {
+      return 'Not enough stock available.';
+    }
+    return raw;
   };
 
+  /** A dedicated toast ID so Sonner deduplicates repeated stock-limit errors. */
+  const STOCK_ERROR_TOAST_ID = 'cart-stock-error';
+
   const handleError = (err: unknown): never => {
-    toast.error(formatError(err));
+    toast.error(formatError(err), { id: STOCK_ERROR_TOAST_ID });
     throw err;
   };
 

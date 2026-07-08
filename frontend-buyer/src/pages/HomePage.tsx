@@ -2,14 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  Flame,
   Loader2,
   PackageSearch,
-  ShoppingBag,
   Search,
+  ShoppingBag,
+  Star,
 } from 'lucide-react';
 import { categoryService, type Category } from '@/services/categoryService';
 import { productService } from '@/services/productService';
-import { ProductGrid } from '@/features/catalog/components/ProductGrid';
+import { ProductCarousel } from '@/components/ui/ProductCarousel';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageMeta } from '@/components/common/PageMeta';
@@ -21,14 +23,21 @@ import { cn } from '@/lib/cn';
  *
  * Sections:
  *   1. Hero strip (brand + tagline)
- *   2. Category quick-pick row
- *   3. Latest products grid (created_desc)
+ *   2. Trending products (price_desc — most popular signal)
+ *   3. Category quick-pick row
+ *   4. New arrivals (created_desc — newest first)
  */
 export function HomePage() {
   const categoriesQuery = useQuery({
     queryKey: ['categories', 'root'],
     queryFn: () => categoryService.list({ limit: 20, isActive: true }),
     staleTime: 5 * 60_000,
+  });
+
+  const trendingQuery = useQuery({
+    queryKey: ['products', 'trending', { limit: 6 }],
+    queryFn: () => productService.list({ limit: 6, sortBy: 'price_desc' }),
+    staleTime: 60_000,
   });
 
   const latestQuery = useQuery({
@@ -44,69 +53,119 @@ export function HomePage() {
         title="Premium multi-vendor marketplace"
         description="Shop curated essentials from independent sellers worldwide. Audio gear, apparel, and accessories — handpicked, fairly priced, delivered to your door."
       />
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
-      {/* Hero */}
-      <Hero />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
 
-      {/* Categories */}
-      <section aria-labelledby="categories-heading">
-        <SectionHeader
-          title="Shop by category"
-          subtitle="Find what you need, faster."
-          linkTo="/shop"
-          linkLabel="See all products"
-        />
-        <div className="mt-6">
-          {categoriesQuery.isLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full" />
-              ))}
-            </div>
-          ) : categoriesQuery.isError ? (
-            <ErrorMessage
-              message="Couldn't load categories. Please refresh."
-            />
-          ) : (
-            <CategoriesRow categories={categoriesQuery.data?.data ?? []} />
-          )}
-        </div>
-      </section>
+        {/* Hero */}
+        <Hero />
 
-      {/* Latest products */}
-      <section aria-labelledby="latest-heading">
-        <SectionHeader
-          title="Latest arrivals"
-          subtitle="Fresh from our sellers."
-          linkTo="/shop?sort=created_desc"
-          linkLabel="Browse newest"
-        />
-        <div className="mt-6">
-          <ProductGrid
-            products={latestQuery.data?.data ?? []}
-            isLoading={latestQuery.isLoading}
-            skeletonCount={5}
-            emptyState={
-              <EmptyState
-                tone="brand"
-                size="sm"
-                icon={<PackageSearch size={20} aria-hidden />}
-                title="No products available yet"
-                description="We're onboarding new sellers every day. Check back soon, or browse all categories."
-                actions={[
-                  {
-                    label: 'Start shopping',
-                    href: '/shop',
-                    variant: 'primary',
-                    leftIcon: <ArrowRight size={14} aria-hidden />,
-                  },
-                ]}
-              />
-            }
+        {/* Trending products */}
+        <section
+          aria-labelledby="trending-heading"
+          className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
+        >
+          <SectionHeader
+            title="Trending Now"
+            subtitle="Most popular this week."
+            linkTo="/shop?sort=price_desc"
+            linkLabel="See all"
+            icon={<Flame size={18} className="text-orange-500" aria-hidden />}
           />
-        </div>
-      </section>
-    </div>
+          <div className="mt-6">
+            {trendingQuery.isLoading ? (
+              <TrendingSkeleton />
+            ) : (
+              <ProductCarousel
+                products={trendingQuery.data?.data ?? []}
+                empty={
+                  <EmptyState
+                    tone="neutral"
+                    size="sm"
+                    icon={<Star size={20} aria-hidden />}
+                    title="No trending products yet"
+                    description="Check back soon — our sellers are adding new items every day."
+                    actions={[
+                      {
+                        label: 'Browse all',
+                        href: '/shop',
+                        variant: 'primary',
+                        leftIcon: <ArrowRight size={14} aria-hidden />,
+                      },
+                    ]}
+                  />
+                }
+              />
+            )}
+          </div>
+        </section>
+
+        {/* Categories */}
+        <section
+          aria-labelledby="categories-heading"
+          className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
+        >
+          <SectionHeader
+            title="Shop by category"
+            subtitle="Find what you need, faster."
+            linkTo="/shop"
+            linkLabel="See all products"
+          />
+          <div className="mt-6">
+            {categoriesQuery.isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            ) : categoriesQuery.isError ? (
+              <ErrorMessage
+                message="Couldn't load categories. Please refresh."
+              />
+            ) : (
+              <CategoriesRow categories={categoriesQuery.data?.data ?? []} />
+            )}
+          </div>
+        </section>
+
+        {/* New arrivals */}
+        <section
+          aria-labelledby="latest-heading"
+          className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
+        >
+          <SectionHeader
+            title="New Arrivals"
+            subtitle="Fresh from our sellers."
+            linkTo="/shop?sort=created_desc"
+            linkLabel="Browse newest"
+            icon={<Star size={18} className="text-amber-500" aria-hidden />}
+          />
+          <div className="mt-6">
+            {latestQuery.isLoading ? (
+              <TrendingSkeleton />
+            ) : (
+              <ProductCarousel
+                products={latestQuery.data?.data ?? []}
+                empty={
+                  <EmptyState
+                    tone="brand"
+                    size="sm"
+                    icon={<PackageSearch size={20} aria-hidden />}
+                    title="No products available yet"
+                    description="We're onboarding new sellers every day. Check back soon, or browse all categories."
+                    actions={[
+                      {
+                        label: 'Start shopping',
+                        href: '/shop',
+                        variant: 'primary',
+                        leftIcon: <ArrowRight size={14} aria-hidden />,
+                      },
+                    ]}
+                  />
+                }
+              />
+            )}
+          </div>
+        </section>
+      </div>
     </>
   );
 }
@@ -286,31 +345,38 @@ function HeroGraphic() {
   );
 }
 
-/* Section header */
+/* ──────────────────────────────────────────────────────────────────────────
+ * Section header
+ * ──────────────────────────────────────────────────────────────────────── */
 
 function SectionHeader({
   title,
   subtitle,
   linkTo,
   linkLabel,
+  icon,
 }: {
   title: string;
   subtitle?: string;
   linkTo?: string;
   linkLabel?: string;
+  icon?: React.ReactNode;
 }) {
   return (
     <div className="flex items-end justify-between gap-4 flex-wrap">
-      <div>
-        <h2
-          id={`${title.toLowerCase().replace(/\s+/g, '-')}-heading`}
-          className="text-xl sm:text-2xl font-bold text-slate-900"
-        >
-          {title}
-        </h2>
-        {subtitle && (
-          <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
-        )}
+      <div className="flex items-center gap-3">
+        {icon && <span className="shrink-0">{icon}</span>}
+        <div>
+          <h2
+            id={`${title.toLowerCase().replace(/\s+/g, '-')}-heading`}
+            className="text-xl sm:text-2xl font-bold text-slate-900"
+          >
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
+          )}
+        </div>
       </div>
       {linkTo && linkLabel && (
         <Link
@@ -384,6 +450,31 @@ function CategoriesRow({ categories }: { categories: Category[] }) {
             />
           </span>
         </Link>
+      ))}
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Loading skeleton for the carousel rows.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+function TrendingSkeleton() {
+  return (
+    <div className="flex gap-4 overflow-hidden pb-1">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex-shrink-0 flex-none w-[200px] sm:w-[220px] lg:w-[240px] rounded-xl overflow-hidden bg-white border border-slate-100 shadow-sm"
+        >
+          <Skeleton className="aspect-square w-full rounded-none" />
+          <div className="p-3 space-y-2">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-5 w-20 mt-1" />
+          </div>
+        </div>
       ))}
     </div>
   );

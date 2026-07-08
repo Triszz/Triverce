@@ -89,6 +89,7 @@ export class ProductVariantEntity {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       stockStatus: this.stockStatus,
+      available: this.available,
     };
   }
 }

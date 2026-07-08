@@ -1,131 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Minus, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { Button } from '@/components/ui/Button';
+import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { useCart } from '@/hooks/useCart';
 import type { CartItemPublic } from '@/services/cartService';
 import { cn } from '@/lib/cn';
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Quantity stepper — small +/- control with a numeric input.
- * The numeric input is "controlled but not committed" — the user types,
- * the row updates visually, but the upstream API is only fired after the
- * user stops typing (or after a single click on + / -).
- * ──────────────────────────────────────────────────────────────────────── */
-
-function QuantityStepper({
-  value,
-  disabled,
-  onCommit,
-  isPending,
-}: {
-  value: number;
-  disabled?: boolean;
-  onCommit: (next: number) => Promise<void> | void;
-  isPending?: boolean;
-}) {
-  // null = the user hasn't touched it; render `value` directly.
-  // Once they touch anything, we keep a local draft until a successful
-  // commit aligns it back with the upstream value.
-  const [draft, setDraft] = useState<number | null>(null);
-  const display = draft ?? value;
-
-  // Debounce so we don't spam the cart API per keystroke.
-  const debounced = useDebouncedValue(display, 400);
-
-  // Keep the latest `onCommit` in a ref so we don't depend on its
-  // identity inside the commit effect. Updated inside an effect so the
-  // "refs during render" rule isn't violated.
-  const onCommitRef = useRef(onCommit);
-  useEffect(() => {
-    onCommitRef.current = onCommit;
-  }, [onCommit]);
-
-  useEffect(() => {
-    if (debounced === value) return;            // already committed
-    if (!Number.isFinite(debounced)) return;    // ignore NaN
-    const next = Math.min(100, Math.max(1, Math.trunc(debounced)));
-    if (next === value) return;
-    onCommitRef.current(next);
-  }, [debounced, value]);
-
-  const dec = () => {
-    if (display <= 1) return;
-    const next = display - 1;
-    setDraft(next);
-    onCommit(next);
-  };
-
-  const inc = () => {
-    if (display >= 100) return;
-    const next = display + 1;
-    setDraft(next);
-    onCommit(next);
-  };
-
-  return (
-    <div
-      className={cn(
-        'inline-flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden',
-        disabled && 'opacity-50 pointer-events-none',
-        isPending && 'animate-pulse',
-      )}
-    >
-      <button
-        type="button"
-        onClick={dec}
-        aria-label="Decrease quantity"
-        disabled={disabled || display <= 1}
-        className="h-8 w-8 inline-flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
-      >
-        <Minus size={14} aria-hidden />
-      </button>
-
-      <input
-        type="number"
-        inputMode="numeric"
-        min={1}
-        max={100}
-        value={display}
-        disabled={disabled}
-        onChange={(e) => {
-          const parsed = Number(e.target.value);
-          setDraft(Number.isFinite(parsed) ? parsed : null);
-        }}
-        onBlur={() => {
-          // If the user types something out of range, snap it to bounds
-          // and commit by clearing the local draft so the parent wins.
-          if (display < 1 || display > 100) {
-            const next = Math.min(100, Math.max(1, Math.trunc(display)));
-            setDraft(next);
-            onCommit(next);
-          }
-        }}
-        aria-label="Quantity"
-        className="h-8 w-12 text-center text-sm font-medium text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-[#002b5b]/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-      />
-
-      <button
-        type="button"
-        onClick={inc}
-        aria-label="Increase quantity"
-        disabled={disabled || display >= 100}
-        className="h-8 w-8 inline-flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
-      >
-        <Plus size={14} aria-hidden />
-      </button>
-
-      {isPending && (
-        <span className="pr-2">
-          <Loader2 size={12} className="animate-spin text-slate-400" aria-hidden />
-        </span>
-      )}
-    </div>
-  );
-}
 
 /* ──────────────────────────────────────────────────────────────────────────
  * CartItemRow
@@ -244,7 +126,14 @@ export function CartItemRow({
         <div className="flex items-center justify-between gap-3 pt-1">
           <QuantityStepper
             value={item.quantity}
+            max={item.availableStock}
             onCommit={handleCommit}
+            onCommitError={() => {
+              // No-op: the stepper resets its own draft to `null` on
+              // failure so the input snaps back to the server value.
+              // TanStack Query's onError in useCart already invalidates
+              // the cart query, so item.quantity will update on re-fetch.
+            }}
             isPending={isUpdating}
           />
 

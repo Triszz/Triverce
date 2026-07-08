@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { User, Package, LogOut, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "../common/Logo";
@@ -100,12 +100,20 @@ function Header() {
 
           {/* Nav actions */}
           <nav className="flex items-center gap-2 sm:gap-4 shrink-0">
-            <Link
+            <NavLink
               to="/shop"
-              className="text-sm font-medium text-slate-600 hover:text-[#002b5b] transition-colors hidden sm:block"
+              className={({ isActive }) =>
+                cn(
+                  "text-sm font-medium transition-colors hidden sm:block relative",
+                  "after:absolute after:-bottom-0.5 after:left-0 after:w-full after:h-0.5 after:rounded-full after:transition-colors",
+                  isActive
+                    ? "text-[#002b5b] font-semibold after:bg-[#002b5b]"
+                    : "text-slate-600 hover:text-[#002b5b] after:bg-transparent"
+                )
+              }
             >
               Shop
-            </Link>
+            </NavLink>
 
             <button
               type="button"

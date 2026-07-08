@@ -148,7 +148,9 @@ export class CartRepository {
     const rows = await this.prisma.cartItem.findMany({
       where: { cartId },
       include: {
-        variant: { include: { product: true } },
+        variant: {
+          include: { product: true, inventory: true },
+        },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -157,6 +159,8 @@ export class CartRepository {
       CartItemEntity.fromDatabase({
         ...row,
         variantProduct: row.variant?.product ?? null,
+        inventoryQuantity: row.variant?.inventory?.quantity,
+        inventoryReserved: row.variant?.inventory?.reserved,
       }),
     );
   }

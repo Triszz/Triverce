@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { PriceTag } from '@/components/ui/PriceTag';
+import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { PageMeta } from '@/components/common/PageMeta';
 import { productService, type ProductVariant } from '@/services/productService';
 import {
@@ -51,19 +52,34 @@ export function ProductDetailPage() {
   // Drawer control — open the slide-over on a successful add.
   const openCartDrawer = useUiStore((s) => s.openCartDrawer);
 
-  // Default to the first active variant once data lands.
-  const firstVariantId = useMemo<string | null>(() => {
+  // Tracks the variant the user has explicitly selected.
+  const [userSelectedVariantId, setUserSelectedVariantId] = useState<string | null>(null);
+
+  // Reset the add-to-cart quantity when the selected variant changes.
+  const lastVariantId = useRef<string | null>(null);
+  const [quantity, setQuantity] = useState(1);
+
+  // Derived display value: respect the user's explicit selection if it's
+  // still valid for the current product; otherwise default to the first
+  // active variant (or the first variant if none are marked active).
+  const selectedVariantId = useMemo<string | null>(() => {
     const variants = productQuery.data?.variants ?? [];
+    if (
+      userSelectedVariantId != null &&
+      variants.some((v) => v.id === userSelectedVariantId)
+    ) {
+      return userSelectedVariantId;
+    }
     const first = variants.find((v) => v.isActive) ?? variants[0];
     return first?.id ?? null;
-  }, [productQuery.data]);
+  }, [productQuery.data, userSelectedVariantId]);
 
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-
-  // Reset selection whenever the underlying product changes.
-  useEffect(() => {
-    setSelectedVariantId(firstVariantId);
-  }, [firstVariantId]);
+  // Synchronously update state without causing a cascading render.
+  // Only resets when the actual selected variant ID changes.
+  if (selectedVariantId !== lastVariantId.current) {
+    lastVariantId.current = selectedVariantId;
+    setQuantity(1);
+  }
 
   const product = productQuery.data ?? null;
   const selectedVariant: ProductVariant | null =
@@ -115,7 +131,7 @@ export function ProductDetailPage() {
   const handleAddToCart = async () => {
     if (!selectedVariant) return;
     try {
-      await addItem({ variantId: selectedVariant.id, quantity: 1 });
+      await addItem({ variantId: selectedVariant.id, quantity });
       toast.success(
         `Added "${product.name}" (${selectedVariant.sku}) to cart`,
       );
@@ -174,7 +190,7 @@ export function ProductDetailPage() {
                 <button
                   key={v.id}
                   type="button"
-                  onClick={() => setSelectedVariantId(v.id)}
+                  onClick={() => setUserSelectedVariantId(v.id)}
                   aria-label={`Switch to ${v.sku}`}
                   className={`h-16 w-16 rounded-lg overflow-hidden border-2 transition-all duration-150 ${
                     selectedVariant?.id === v.id
@@ -237,12 +253,25 @@ export function ProductDetailPage() {
               <VariantPicker
                 variants={product.variants}
                 selectedId={selectedVariantId}
-                onSelect={setSelectedVariantId}
+                onSelect={setUserSelectedVariantId}
               />
             </div>
           )}
 
           <div className="border-t border-slate-100 pt-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-slate-700">Qty</span>
+              <QuantityStepper
+                value={quantity}
+                max={selectedVariant?.available}
+                disabled={!selectedVariant || isOutOfStock}
+                isPending={isAdding}
+                onCommit={setQuantity}
+                onCommitError={() => setQuantity(1)}
+                className="[&_.h-8]:!h-9 [&_.w-8]:!w-9"
+              />
+            </div>
+
             <Button
               variant="primary"
               size="lg"

@@ -56,6 +56,8 @@ export interface ProductVariant {
   createdAt: string;
   updatedAt: string;
   stockStatus: StockStatus;
+  /** Available quantity: total inventory minus reserved stock. */
+  available?: number;
 }
 
 /** `ProductEntity.toPublicDetail()` — full product with variants. */

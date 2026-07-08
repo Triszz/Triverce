@@ -1,31 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 import type { Category } from '@/services/categoryService';
 import type { ProductSort } from '@/services/productService';
+import {
+  EMPTY_FILTERS,
+  type ProductFiltersValue,
+} from './ProductFilters.constants';
 
-/**
- * The shape of filter state ProductFilters owns. The parent component
- * (CatalogPage / HomePage) is responsible for pushing it into URL params
- * and forwarding it to the API query.
- */
-export interface ProductFiltersValue {
-  search: string;
-  categoryId: string | null;
-  minPrice: number | null;
-  maxPrice: number | null;
-  sortBy: ProductSort;
-}
-
-export const EMPTY_FILTERS: ProductFiltersValue = {
-  search: '',
-  categoryId: null,
-  minPrice: null,
-  maxPrice: null,
-  sortBy: 'created_desc',
-};
+/* Sort options exposed in the UI. Kept human-readable. */
+const SORT_OPTIONS_LABELS: Array<{ value: ProductSort; label: string }> = [
+  { value: 'created_desc', label: 'Newest first' },
+  { value: 'price_asc', label: 'Price: low to high' },
+  { value: 'price_desc', label: 'Price: high to low' },
+  { value: 'name_asc', label: 'Name: A → Z' },
+  { value: 'name_desc', label: 'Name: Z → A' },
+];
 
 export interface ProductFiltersProps {
   /** Categories to render as pills. Parent decides which to fetch. */
@@ -39,15 +31,6 @@ export interface ProductFiltersProps {
   searchDebounceMs?: number;
   className?: string;
 }
-
-/* Sort options exposed in the UI. Kept human-readable. */
-const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
-  { value: 'created_desc', label: 'Newest first' },
-  { value: 'price_asc', label: 'Price: low to high' },
-  { value: 'price_desc', label: 'Price: high to low' },
-  { value: 'name_asc', label: 'Name: A → Z' },
-  { value: 'name_desc', label: 'Name: Z → A' },
-];
 
 /**
  * ProductFilters — controlled, debounced filter bar.
@@ -70,9 +53,16 @@ export function ProductFilters({
    * debouncing the actual filter change up to the parent. */
   const [searchDraft, setSearchDraft] = useState(value.search);
 
+  // Track the last external value seen so we can reset the draft
+  // without synchronously calling setState inside the effect.
+  const lastExternalSearch = useRef(value.search);
+
   // Keep the draft in sync if the parent resets externally.
   useEffect(() => {
-    setSearchDraft(value.search);
+    if (value.search !== lastExternalSearch.current) {
+      lastExternalSearch.current = value.search;
+      setSearchDraft(value.search);
+    }
   }, [value.search]);
 
   // Debounce: when the draft changes, schedule an onChange call.
@@ -141,7 +131,7 @@ export function ProductFilters({
             }
             className="w-full"
           >
-            {SORT_OPTIONS.map((opt) => (
+            {SORT_OPTIONS_LABELS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import AuthLayout from './layouts/AuthLayout';
 import { PageSuspense } from './components/ui/PageSuspense';
+import { ScrollToTop } from './components/common/ScrollToTop';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Code-split every top-level page.
@@ -69,10 +70,29 @@ const LoginPage = lazy(() =>
 const RegisterPage = lazy(() =>
   import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })),
 );
+const AboutPage = lazy(() =>
+  import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })),
+);
+const ContactPage = lazy(() =>
+  import('./pages/ContactPage').then((m) => ({ default: m.ContactPage })),
+);
+const TermsPage = lazy(() =>
+  import('./pages/TermsPage').then((m) => ({ default: m.TermsPage })),
+);
+const PrivacyPage = lazy(() =>
+  import('./pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage })),
+);
+const ShippingPage = lazy(() =>
+  import('./pages/ShippingPage').then((m) => ({ default: m.ShippingPage })),
+);
+const ReturnsPage = lazy(() =>
+  import('./pages/ReturnsPage').then((m) => ({ default: m.ReturnsPage })),
+);
 
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         {/* Auth routes — split-screen layout */}
         <Route element={<AuthLayout />}>
@@ -175,6 +195,56 @@ function App() {
             element={
               <Suspense fallback={<PageSuspense />}>
                 <PageSuspense />
+              </Suspense>
+            }
+          />
+
+          {/* Content pages */}
+          <Route
+            path="/about"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <AboutPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/contact"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <ContactPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/terms"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <TermsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/privacy"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <PrivacyPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/shipping"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <ShippingPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/returns"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <ReturnsPage />
               </Suspense>
             }
           />

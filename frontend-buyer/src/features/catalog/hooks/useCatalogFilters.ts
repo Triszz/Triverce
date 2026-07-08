@@ -1,8 +1,10 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ProductSort } from '@/services/productService';
-import type { ProductFiltersValue } from '@/features/catalog/components/ProductFilters';
-import { EMPTY_FILTERS } from '@/features/catalog/components/ProductFilters';
+import {
+  EMPTY_FILTERS,
+  type ProductFiltersValue,
+} from '@/features/catalog/components/ProductFilters.constants';
 
 const VALID_SORTS: readonly ProductSort[] = [
   'created_desc',

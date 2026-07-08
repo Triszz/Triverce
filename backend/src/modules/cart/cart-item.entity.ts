@@ -1,4 +1,4 @@
-import type { CartItem, ProductVariant, Product } from "@prisma/client";
+import type { CartItem, Inventory, ProductVariant, Product } from "@prisma/client";
 
 export class CartItemEntity {
   constructor(
@@ -15,7 +15,19 @@ export class CartItemEntity {
     public readonly productName?: string,
     public readonly productSlug?: string,
     public readonly variantImageUrl?: string | null,
+
+    // Inventory for stock-limit UI
+    public readonly inventoryQuantity?: number,
+    public readonly inventoryReserved?: number,
   ) {}
+
+  /** Quantity available to the customer (total minus reserved). */
+  get availableStock(): number {
+    const qty = this.inventoryQuantity ?? 0;
+    const reserved = this.inventoryReserved ?? 0;
+    const available = qty - reserved;
+    return available > 0 ? available : 0;
+  }
 
   get subtotal(): number {
     return (this.variantPrice ?? 0) * this.quantity;
@@ -44,6 +56,8 @@ export class CartItemEntity {
     row: CartItem & {
       variant?: ProductVariant | null;
       variantProduct?: Product | null;
+      inventoryQuantity?: number | null;
+      inventoryReserved?: number | null;
     },
   ): CartItemEntity {
     const variant = row.variant ?? null;
@@ -60,6 +74,8 @@ export class CartItemEntity {
       product?.name,
       product?.slug,
       variant?.imageUrl,
+      row.inventoryQuantity ?? undefined,
+      row.inventoryReserved ?? undefined,
     );
   }
 
@@ -74,6 +90,7 @@ export class CartItemEntity {
       productSlug: this.productSlug,
       imageUrl: this.variantImageUrl,
       subtotal: this.subtotal,
+      availableStock: this.availableStock,
       updatedAt: this.updatedAt,
     };
   }

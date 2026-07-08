@@ -19,6 +19,8 @@ export interface CartItemPublic {
   productSlug?: string;
   imageUrl?: string | null;
   subtotal: number;
+  /** Available quantity: total inventory minus reserved stock. Used to enforce stock limits on the UI. */
+  availableStock?: number;
   updatedAt: string;
 }
 
