@@ -142,6 +142,7 @@
   }
 
   /* ── Button utilities ─────────────────────────────────────────────────── */
+  .btn-primary {
     @apply inline-flex items-center justify-center rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white
            hover:bg-[#001f3f] active:bg-[#001540] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }

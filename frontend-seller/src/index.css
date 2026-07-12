@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Design tokens (extended under Tailwind v4 @theme).
+ * Same indigo-deep brand palette as frontend-buyer so the seller dashboard
+ * feels native to the rest of the product (navy `#002b5b`).
+ * ──────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-brand: #002b5b;
+  --color-brand-light: #1d4ed8;
+  --color-brand-50:  #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #002b5b;
+  --color-brand-900: #1e1b4b;
+
+  --radius-card: 0.75rem;
+  --radius-pill: 9999px;
+
+  --font-sans: "DM Sans", "Inter", system-ui, sans-serif;
+  --font-heading: "DM Sans", "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-600 antialiased;
+    font-family: var(--font-sans);
+    margin: 0;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-slate-900 font-semibold;
+    font-family: var(--font-heading);
+  }
+
+  a {
+    @apply transition-colors duration-150;
+  }
+}

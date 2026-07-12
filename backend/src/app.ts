@@ -29,8 +29,22 @@ const webhookController = container.resolve("webhookController");
 app.use("/api/webhooks", createWebhookRouter(webhookController));
 
 app.use(express.json());
-const FRONTEND_ORIGIN =
-  process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
+
+/**
+ * CORS — supports multiple local frontends (buyer + seller dev servers).
+ *
+ * Resolves `FRONTEND_ORIGIN` from the environment, splitting on commas
+ * so we can pass either a single origin or a list:
+ *   FRONTEND_ORIGIN="http://localhost:5173,http://localhost:5174"
+ * Falls back to the two Vite dev ports used by frontend-buyer and
+ * frontend-seller.
+ */
+const FRONTEND_ORIGIN = (
+  process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173,http://localhost:5174'
+)
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
