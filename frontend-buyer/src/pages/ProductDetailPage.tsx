@@ -13,7 +13,11 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { PageMeta } from '@/components/common/PageMeta';
-import { productService, type ProductVariant } from '@/services/productService';
+import {
+  productService,
+  pickHeroImage,
+  type ProductVariant,
+} from '@/services/productService';
 import {
   VariantPicker,
   StockBadge,
@@ -55,6 +59,13 @@ export function ProductDetailPage() {
   // Tracks the variant the user has explicitly selected.
   const [userSelectedVariantId, setUserSelectedVariantId] = useState<string | null>(null);
 
+  // Tracks which gallery thumbnail the user has clicked. `null` means
+  // "no explicit pick — use the variant image if available, otherwise
+  // the first gallery image." We store an index (not a URL) so the
+  // selection survives product cache invalidations where the URL list
+  // is structurally the same (memoization stays valid).
+  const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+
   // Reset the add-to-cart quantity when the selected variant changes.
   const lastVariantId = useRef<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -87,6 +98,45 @@ export function ProductDetailPage() {
     product?.variants.find((v) => v.isActive) ??
     product?.variants[0] ??
     null;
+
+  // The gallery list we render thumbs for. We resolve once per render
+  // and prefer `product.images`, falling back to a single-element list
+  // built from `product.imageUrl` so products that pre-date the
+  // multi-image rollout still render a populated gallery tile.
+  const galleryImages = useMemo<string[]>(() => {
+    if (!product) return [];
+    if (product.images && product.images.length > 0) return product.images;
+    const fallback = pickHeroImage(product);
+    return fallback ? [fallback] : [];
+    // pickHeroImage reads `imageUrl` which is part of product — when
+    // product changes, the memo invalidates. We intentionally omit
+    // pickHeroImage from deps (stable across renders).
+  }, [product]);
+
+  // Hero resolution order (kept in render, not an effect):
+  //   1. Explicit thumbnail click (`activeImageIndex`).
+  //   2. The selected variant's own image (variant-specific photography).
+  //   3. The first gallery image.
+  //   4. `null` (renderers fall back to a placeholder).
+  const heroImage: string | null =
+    (activeImageIndex !== null && galleryImages[activeImageIndex]) ||
+    selectedVariant?.imageUrl ||
+    galleryImages[0] ||
+    null;
+
+  // Reset the thumbnail + variant selection when the slug changes so
+  // the previous product's picks don't leak into the new one. We do
+  // this synchronously during render (vs. inside a useEffect) to avoid
+  // the `set-state-in-effect` cascading-render warning. The ref
+  // comparison guards against resetting on the very first render.
+  const lastSlugRef = useRef<string | undefined>(undefined);
+  // eslint-disable-next-line react-hooks/refs
+  if (slug !== lastSlugRef.current) {
+    // eslint-disable-next-line react-hooks/refs
+    lastSlugRef.current = slug;
+    if (activeImageIndex !== null) setActiveImageIndex(null);
+    if (userSelectedVariantId !== null) setUserSelectedVariantId(null);
+  }
 
   /* ── UI ──────────────────────────────────────────────────────────────── */
 
@@ -141,8 +191,6 @@ export function ProductDetailPage() {
     }
   };
 
-  const heroImage = selectedVariant?.imageUrl ?? null;
-
   return (
     <>
       <PageMeta
@@ -161,7 +209,7 @@ export function ProductDetailPage() {
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-        {/* Image column */}
+        {/* Image column — main gallery hero + thumbnail strip */}
         <div className="space-y-3">
           <div className="aspect-square overflow-hidden rounded-2xl bg-slate-50 border border-slate-100 shadow-sm">
             {heroImage ? (
@@ -184,13 +232,70 @@ export function ProductDetailPage() {
             )}
           </div>
 
+          {/*
+           * Gallery thumbnail row. We render `galleryImages` (which may
+           * contain a single legacy `imageUrl` entry for pre-migration
+           * products) instead of `product.variants` so the row reflects
+           * the product-level gallery rather than per-variant chips.
+           * The hero has its own precedence (variant image > gallery[0]),
+           * so picking a thumbnail is mostly about *flipping the hero*
+           * without disturbing the active variant.
+           */}
+          {galleryImages.length > 1 && (
+            <div className="flex flex-wrap gap-2" aria-label="Product gallery">
+              {galleryImages.map((url, index) => {
+                // "Active" means: the hero is currently showing this
+                // thumbnail. The active state can be either an explicit
+                // click (activeImageIndex === index) or the implicit
+                // "first image" when no thumbnail has been clicked and
+                // no variant image is overriding.
+                const isActive =
+                  activeImageIndex === index ||
+                  (activeImageIndex === null &&
+                    selectedVariant?.imageUrl === undefined &&
+                    index === 0);
+                return (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => setActiveImageIndex(index)}
+                    aria-label={`Show image ${index + 1} of ${galleryImages.length}`}
+                    aria-pressed={isActive}
+                    className={`h-16 w-16 rounded-lg overflow-hidden border-2 transition-all duration-150 ${
+                      isActive
+                        ? 'border-[#002b5b] ring-2 ring-[#002b5b]/30'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <img
+                      src={url}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Variant chips — these switch the *active variant* (which
+           * also affects price + stock), independent of the gallery
+           * thumbnail row above. We only show them when there's more
+           * than one variant AND the variant has its own image, so the
+           * row doesn't add noise for single-variant products. */}
           {product.variants.length > 1 && (
-            <div className="flex flex-wrap gap-2" aria-label="Other variants">
+            <div className="flex flex-wrap gap-2" aria-label="Variant previews">
               {product.variants.map((v) => (
                 <button
                   key={v.id}
                   type="button"
-                  onClick={() => setUserSelectedVariantId(v.id)}
+                  onClick={() => {
+                    setUserSelectedVariantId(v.id);
+                    // Reset the gallery selection so the variant's own
+                    // image takes over the hero naturally.
+                    setActiveImageIndex(null);
+                  }}
                   aria-label={`Switch to ${v.sku}`}
                   className={`h-16 w-16 rounded-lg overflow-hidden border-2 transition-all duration-150 ${
                     selectedVariant?.id === v.id

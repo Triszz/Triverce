@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PriceTag } from '@/components/ui/PriceTag';
-import type { ProductSummary } from '@/services/productService';
+import { pickHeroImage, type ProductSummary } from '@/services/productService';
 import { cn } from '@/lib/cn';
 
 interface ProductCarouselProps {
@@ -116,18 +116,21 @@ function ProductCard({ product }: { product: ProductSummary }) {
     >
       {/* Image */}
       <div className="aspect-square overflow-hidden bg-slate-50">
-        {product.imageUrl ? (
-          <img
-            src={product.imageUrl}
-            alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="h-full w-full flex items-center justify-center text-slate-300 text-2xl font-semibold">
-            {product.name.charAt(0).toUpperCase()}
-          </div>
-        )}
+        {(() => {
+          const heroSrc = pickHeroImage(product);
+          return heroSrc ? (
+            <img
+              src={heroSrc}
+              alt={product.name}
+              loading="lazy"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-slate-300 text-2xl font-semibold">
+              {product.name.charAt(0).toUpperCase()}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Info */}

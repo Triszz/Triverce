@@ -8,6 +8,9 @@ const MAX_SIZE_MB = 5;
 export const multerUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
+    // Per-file size limit. Endpoint-level caps (maxCount) live with
+    // the route: `upload.array('images', 10)` lets the dashboard send
+    // up to 10 images per call.
     fileSize: MAX_SIZE_MB * 1024 * 1024,
   },
 

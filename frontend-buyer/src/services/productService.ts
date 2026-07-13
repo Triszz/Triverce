@@ -31,10 +31,20 @@ export interface ProductSummary {
   maxPrice: number;
   isActive: boolean;
   /**
-   * Hero image. Backend sets it to the cheapest active variant's imageUrl
-   * (or null if the product has no variants).
+   * Hero image. Backend sets it to `images[0]`, then the cheapest active
+   * variant's `imageUrl`, then `null`. Older endpoints (or callers that
+   * haven't refreshed their contracts) can still read this field; new
+   * components prefer `pickHeroImage(product)` for a single source of
+   * truth.
    */
   imageUrl: string | null;
+  /**
+   * Ordered list of gallery images, as served by the backend's
+   * `getEffectiveImages()` helper. Element [0] is the primary image.
+   * May be missing on older payloads — callers should fall back to
+   * `imageUrl`.
+   */
+  images?: string[];
 }
 
 /** One attribute value attached to a variant. */
@@ -65,7 +75,35 @@ export interface ProductDetail extends Omit<ProductSummary, 'imageUrl'> {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * The product gallery. May contain variant imageUrls as a legacy
+   * fallback when the product was created before the multi-image
+   * rollout (see backend `ProductEntity.getEffectiveImages`).
+   */
+  images: string[];
+  /** Convenience field — same as `images[0]`. Kept for back-compat. */
+  imageUrl: string | null;
   variants: ProductVariant[];
+}
+
+/**
+ * Pick the best hero image for a product. Resolution order:
+ *
+ *   1. `images[0]` (the persisted gallery array — preferred).
+ *   2. `imageUrl` (legacy field — populated by the backend fallback).
+ *   3. First active variant's `imageUrl`.
+ *   4. `null` (renderers should fall back to a placeholder).
+ *
+ * Centralising this here means every catalog surface uses the same
+ * precedence — important after the single-image → multi-image
+ * migration so we don't end up with one card showing the variant image
+ * and another showing the gallery hero.
+ */
+export function pickHeroImage(product: ProductSummary | ProductDetail): string | null {
+  const images = (product as { images?: string[] }).images;
+  if (images && images.length > 0) return images[0];
+  if (product.imageUrl) return product.imageUrl;
+  return null;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

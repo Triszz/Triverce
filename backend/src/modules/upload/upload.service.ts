@@ -23,7 +23,36 @@ export class LocalUploadService implements IUploadService {
     await fs.mkdir(path.join(this.baseDir, "variants"), { recursive: true });
   }
 
-  // Upload product image
+  /**
+   * Upload multiple images for a product. Order is preserved — file at
+   * index N becomes the URL at position N of the returned `images[]`.
+   * Maximum 10 files per request (enforced by `upload.array('images', 10)`).
+   *
+   * Persistence happens in the controller (which has access to the
+   * product service for ownership checks). This service is the I/O
+   * layer only.
+   */
+  async uploadProductImages(
+    files: Express.Multer.File[],
+    productId: string,
+  ): Promise<UploadResult[]> {
+    if (!Array.isArray(files) || files.length === 0) {
+      throw new BadRequestError("No files uploaded");
+    }
+    const results: UploadResult[] = [];
+    for (const file of files) {
+      results.push(
+        await this.processAndSave(file, "products", productId, {
+          width: 800,
+          height: 800,
+          quality: 85,
+        }),
+      );
+    }
+    return results;
+  }
+
+  // Legacy single-image call (kept for backwards-compat callers).
   async uploadProductImage(
     file: Express.Multer.File,
     productId: string,

@@ -46,6 +46,16 @@ export const createProductRouter = (controller: ProductController) => {
     controller.delete,
   );
 
+  // Replace the product's entire gallery (drag-to-reorder, remove).
+  // Authenticated dashboard flow; the upload endpoint appends new URLs
+  // for us, this one lets the seller rearrange/remove what already exists.
+  router.put(
+    "/:id/images",
+    authenticate,
+    requireRole("seller", "admin"),
+    controller.setImages,
+  );
+
   // Variant routes
   router.post(
     "/:id/variants",

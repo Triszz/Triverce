@@ -7,13 +7,15 @@ import { requireRole } from "../../core/middleware/rbac.middleware";
 export const createUploadRouter = (controller: UploadController) => {
   const router = Router();
 
-  // Upload product image
+  // Upload one or more product images (max 10 per request). The dashboard
+  // bundles these into `images[]` in a single round-trip — element [0]
+  // is treated as the primary / thumbnail image.
   router.post(
     "/products/:productId",
     authenticate,
     requireRole("seller", "admin"),
-    multerUpload.single("image"),
-    controller.uploadProductImage,
+    multerUpload.array("images", 10),
+    controller.uploadProductImages,
   );
 
   // Upload variant image

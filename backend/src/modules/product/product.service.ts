@@ -88,9 +88,48 @@ export class ProductService {
       description: dto.description,
       basePrice: dto.basePrice,
       isActive: dto.isActive,
+      // Wholesale image replacement is exposed via the dedicated
+      // setProductImages() service method (separate audit trail) — the
+      // PATCH /api/products/:id route shouldn't accept `images` directly.
     });
 
     return updated!;
+  }
+
+  /**
+   * Append image URLs (returned from the upload endpoint) to a product's
+   * gallery array. The dashboard uses this for "upload more" without
+   * needing to also send the existing array back.
+   */
+  async appendProductImages(
+    productId: string,
+    urls: string[],
+    user: { userId: string; role: string },
+  ): Promise<string[]> {
+    const product = await this.productRepository.findById(productId);
+    if (!product) throw new NotFoundError(`Product with id "${productId}" not found`);
+    this.verifyOwnership(product, user);
+    const next = await this.productRepository.appendProductImages(productId, urls);
+    if (!next)
+      throw new Error("Failed to append product images");
+    return next;
+  }
+
+  /**
+   * Replace the product's entire gallery — used by the reorder / delete
+   * endpoint on the seller dashboard.
+   */
+  async setProductImages(
+    productId: string,
+    urls: string[],
+    user: { userId: string; role: string },
+  ): Promise<string[]> {
+    const product = await this.productRepository.findById(productId);
+    if (!product) throw new NotFoundError(`Product with id "${productId}" not found`);
+    this.verifyOwnership(product, user);
+    const next = await this.productRepository.setProductImages(productId, urls);
+    if (!next) throw new Error("Failed to set product images");
+    return next;
   }
 
   // Delete product

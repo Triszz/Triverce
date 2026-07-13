@@ -97,6 +97,22 @@ async function createUsers() {
         role: UserRole.seller,
       },
     }),
+    prisma.user.create({
+      data: {
+        email: "seller2@triverce.com",
+        passwordHash,
+        fullName: "Triverce Seller 2",
+        role: UserRole.seller,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        email: "seller3@triverce.com",
+        passwordHash,
+        fullName: "Triverce Seller 3",
+        role: UserRole.seller,
+      },
+    }),
   ]);
 }
 
@@ -364,7 +380,8 @@ async function main(): Promise<void> {
   await clearAll();
 
   console.log("  • Creating users");
-  const [, , seller] = await createUsers();
+  const [, , seller, seller2, seller3] = await createUsers();
+  const sellers = [seller, seller2, seller3];
 
   console.log("  • Creating attributes");
   const [attrColor, attrSize, attrStorage] = await createAttributes();
@@ -378,7 +395,7 @@ async function main(): Promise<void> {
   const categories = await createCategories();
 
   console.log(`  • Creating ${PRODUCTS.length} products with variants + inventory`);
-  for (const spec of PRODUCTS) {
+  for (const [index, spec] of PRODUCTS.entries()) {
     const product = await prisma.product.create({
       data: {
         slug: spec.slug,
@@ -386,7 +403,7 @@ async function main(): Promise<void> {
         description: spec.description,
         basePrice: spec.basePrice,
         categoryId: categories[spec.categorySlug].id,
-        sellerId: seller.id,
+        sellerId: sellers[index % sellers.length].id,
       },
     });
 
@@ -418,9 +435,11 @@ async function main(): Promise<void> {
 
   console.log("✅ Seed complete.");
   console.log("   Login with:");
-  console.log("     admin@triverce.com / password123   (role: admin)");
+  console.log("     admin@triverce.com / password123    (role: admin)");
   console.log("     customer@triverce.com / password123 (role: customer)");
   console.log("     seller@triverce.com / password123   (role: seller)");
+  console.log("     seller2@triverce.com / password123  (role: seller)");
+  console.log("     seller3@triverce.com / password123  (role: seller)");
 }
 
 main()

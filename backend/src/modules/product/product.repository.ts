@@ -27,6 +27,7 @@ export class ProductRepository {
   ): Promise<{ data: ProductEntity[]; total: number }> {
     const where: Prisma.ProductWhereInput = { deletedAt: null };
     if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.sellerId) where.sellerId = query.sellerId;
     if (query.isActive !== undefined) where.isActive = query.isActive;
     if (query.search) {
       where.name = { contains: query.search, mode: "insensitive" };
@@ -233,6 +234,7 @@ export class ProductRepository {
       description: string | null;
       basePrice: number;
       isActive: boolean;
+      images: string[];
     }>,
   ): Promise<ProductEntity | null> {
     const updateData: Prisma.ProductUpdateInput = {};
@@ -247,11 +249,69 @@ export class ProductRepository {
     if (data.description !== undefined) updateData.description = data.description;
     if (data.basePrice !== undefined) updateData.basePrice = data.basePrice;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.images !== undefined) updateData.images = { set: data.images };
 
     try {
       const row = await this.prisma.product.update({ where: { id }, data: updateData });
       const variants = await this.loadVariantsWithAttributes(id);
       return ProductEntity.fromDatabase(row, variants);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Append newly uploaded image URLs to a product's `images` array.
+   *
+   * Why this is a dedicated method: the upload route processes N files
+   * in parallel. We need to merge those URLs onto whatever was already
+   * in the array (first upload on a blank product → append N; second
+   * upload after some edits → append more) without an explicit PATCH
+   * from the dashboard.
+   *
+   * Uses a Postgres `array_cat` so the operation is atomic and safe
+   * against concurrent appends from a second upload tab.
+   */
+  async appendProductImages(
+    productId: string,
+    urls: string[],
+  ): Promise<string[] | null> {
+    if (urls.length === 0) return null;
+    try {
+      // Single round-trip append via raw SQL — Prisma's update API
+      // doesn't natively expose `array_cat`.
+      const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
+        UPDATE products
+        SET images = images || ${urls}::text[],
+            updated_at = NOW()
+        WHERE id = ${productId}::uuid
+          AND deleted_at IS NULL
+        RETURNING images
+      `;
+      return rows[0]?.images ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Replace a product's entire `images` array (used by the reorder /
+   * remove flow from the edit page). Validation is enforced upstream.
+   */
+  async setProductImages(
+    productId: string,
+    urls: string[],
+  ): Promise<string[] | null> {
+    try {
+      const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
+        UPDATE products
+        SET images = ${urls}::text[],
+            updated_at = NOW()
+        WHERE id = ${productId}::uuid
+          AND deleted_at IS NULL
+        RETURNING images
+      `;
+      return rows[0]?.images ?? null;
     } catch {
       return null;
     }

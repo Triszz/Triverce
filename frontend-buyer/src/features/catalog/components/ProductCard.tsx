@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ProductSummary } from '@/services/productService';
+import { pickHeroImage } from '@/services/productService';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { cn } from '@/lib/cn';
 
@@ -43,7 +44,10 @@ export interface ProductCardProps {
  */
 export function ProductCard({ product, className }: ProductCardProps) {
   const hasPriceRange = product.minPrice !== product.maxPrice;
-  const heroSrc = product.imageUrl ?? null;
+  // Use the shared picker so cards render the same hero regardless of
+  // whether the backend populated the new `images[]` or the legacy
+  // `imageUrl` field (or both).
+  const heroSrc = pickHeroImage(product);
 
   return (
     <Link

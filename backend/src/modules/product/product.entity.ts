@@ -9,6 +9,7 @@ export class ProductEntity {
     public readonly slug: string,
     public readonly description: string | null,
     public readonly basePrice: number,
+    public readonly images: ReadonlyArray<string>,
     public readonly isActive: boolean,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
@@ -44,6 +45,40 @@ export class ProductEntity {
     return this.variants.length === 1 && this.variants[0].isSimpleVariant();
   }
 
+  /**
+   * Main / thumbnail image for catalog cards. First gallery image wins;
+   * fall back to the first active variant image, then `null`.
+   */
+  getMainImageUrl(): string | null {
+    if (this.images.length > 0) return this.images[0];
+    const variant = this.variants.find((v) => v.isActive) ?? this.variants[0];
+    return variant?.imageUrl ?? null;
+  }
+
+  /**
+   * The image list we actually serve to clients — merges the persisted
+   * `images[]` with any variant `imageUrl` that hasn't been migrated
+   * over yet (legacy products created before the multi-image rollout).
+   *
+   * Order preserved: stored images first, then any *unique* variant
+   * images appended. We de-duplicate by URL so a variant image that
+   * somehow already lives in `images[]` (e.g. after a future backfill)
+   * doesn't show up twice in the gallery.
+   *
+   * Read-only — returns a fresh array per call so consumers can mutate.
+   */
+  getEffectiveImages(): string[] {
+    const stored = [...this.images];
+    const seen = new Set(stored);
+    for (const variant of this.variants) {
+      if (!variant.imageUrl) continue;
+      if (seen.has(variant.imageUrl)) continue;
+      seen.add(variant.imageUrl);
+      stored.push(variant.imageUrl);
+    }
+    return stored;
+  }
+
   static fromDatabase(
     row: Product,
     variants: import("./product-variant.entity").ProductVariantEntity[] = [],
@@ -56,6 +91,13 @@ export class ProductEntity {
       row.slug,
       row.description,
       Number(row.basePrice),
+      // Prisma returns the array as Prisma.JsonValue / string[] depending
+      // on driver version; normalize defensively.
+      Array.isArray(row.images)
+        ? (row.images as string[])
+        : row.images && typeof row.images === "object"
+          ? Object.values(row.images as Record<string, string>)
+          : [],
       row.isActive,
       row.createdAt,
       row.updatedAt,
@@ -64,9 +106,6 @@ export class ProductEntity {
   }
 
   toPublicSummary() {
-    const imageUrl = this.variants.length > 0
-      ? (this.variants.find((v) => v.isActive) ?? this.variants[0]).imageUrl ?? null
-      : null;
     return {
       id: this.id,
       sellerId: this.sellerId,
@@ -77,7 +116,10 @@ export class ProductEntity {
       minPrice: this.getMinPrice(),
       maxPrice: this.getMaxPrice(),
       isActive: this.isActive,
-      imageUrl,
+      // Main image now reads from `images[]` first, variant image as
+      // fallback. The dashboard cells / storefront cards consume this.
+      imageUrl: this.getMainImageUrl(),
+      images: [...this.images],
     };
   }
 
@@ -93,6 +135,14 @@ export class ProductEntity {
       minPrice: this.getMinPrice(),
       maxPrice: this.getMaxPrice(),
       isActive: this.isActive,
+      // `getEffectiveImages()` flattens legacy variant imageUrls into
+      // the gallery so pre-migration products still render a populated
+      // gallery on the storefront. New uploads persist straight into
+      // `images[]` and skip the fallback.
+      images: this.getEffectiveImages(),
+      // Convenience: also surface `imageUrl` for screens that only need
+      // the primary image (matches old single-image contract).
+      imageUrl: this.getMainImageUrl(),
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       variants: this.variants.map((v) => v.toPublic()),

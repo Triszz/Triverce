@@ -4,6 +4,8 @@ import { SellerLayout } from '@/components/layout/SellerLayout';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
 import { ProductsListPage } from '@/features/products/pages/ProductsListPage';
+import { ProductCreatePage } from '@/features/products/pages/ProductCreatePage';
+import { ProductEditPage } from '@/features/products/pages/ProductEditPage';
 import { OrdersListPage } from '@/features/orders/pages/OrdersListPage';
 import { StoreSettingsPage } from '@/features/settings/pages/StoreSettingsPage';
 
@@ -20,6 +22,8 @@ function App() {
           <Route element={<SellerLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="products" element={<ProductsListPage />} />
+            <Route path="products/new" element={<ProductCreatePage />} />
+            <Route path="products/:id/edit" element={<ProductEditPage />} />
             <Route path="orders" element={<OrdersListPage />} />
             <Route path="settings" element={<StoreSettingsPage />} />
           </Route>

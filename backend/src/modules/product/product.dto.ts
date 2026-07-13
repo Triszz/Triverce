@@ -48,8 +48,20 @@ export const CreateProductSchema = z.object({
 });
 
 // Update Product
-export const UpdateProductSchema = CreateProductSchema.omit({ variants: true }) // Cannot change variants here, handle by /products/:id/variants
-  .partial();
+export const UpdateProductSchema = CreateProductSchema.omit({
+  variants: true, // Cannot change variants here, handle by /products/:id/variants
+}).partial();
+
+// Re-add `images` as an explicit partial after the omit above.
+export const UpdateProductImagesSchema = z.object({
+  images: z
+    .array(z.url("Invalid image URL").max(2048))
+    .max(20, "Maximum of 20 images per product")
+    .default([]),
+});
+export const UpdateProductSchemaWithImages = UpdateProductSchema.merge(
+  UpdateProductImagesSchema,
+);
 
 // Add a variant to existing product
 export const AddVariantSchema = VariantSchema;
@@ -62,6 +74,7 @@ export const UpdateVariantSchema = VariantSchema.omit({ attributes: true }) // C
 export const ProductQuerySchema = z
   .object({
     categoryId: z.uuid().optional(),
+    sellerId: z.uuid().optional(),
     isActive: z
       .string()
       .optional()
@@ -104,6 +117,7 @@ export const ProductQuerySchema = z
 
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
+export type UpdateProductImagesDto = z.infer<typeof UpdateProductImagesSchema>;
 export type AddVariantDto = z.infer<typeof AddVariantSchema>;
 export type UpdateVariantDto = z.infer<typeof UpdateVariantSchema>;
 export type ProductQuery = z.infer<typeof ProductQuerySchema>;

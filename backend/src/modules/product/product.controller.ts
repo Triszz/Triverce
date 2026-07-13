@@ -1,3 +1,14 @@
+import { z } from "zod";
+
+// Dedicated "set images" schema. Lives in the controller rather than
+// product.dto.ts because it isn't a CRUD-shaped DTO — it's a wholesale
+// gallery replacement used by the dashboard's reorder/remove affordances.
+const SetProductImagesSchema = z.object({
+  images: z
+    .array(z.url("Invalid image URL").max(2048))
+    .max(20, "Maximum of 20 images per product"),
+});
+
 import { Request, Response, NextFunction } from "express";
 import { ProductService } from "./product.service";
 import {
@@ -132,6 +143,29 @@ export class ProductController {
         success: true,
         data: variant.toPublic(),
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Set the entire gallery array (drag-to-reorder, remove). Validates
+  // the URL list and persists via the service. Returns the final list.
+  setImages = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = SetProductImagesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid image list",
+          errors: parsed.error.flatten(),
+        });
+      }
+      const next = await this.productService.setProductImages(
+        req.params.id as string,
+        parsed.data.images,
+        req.user!,
+      );
+      res.status(200).json({ success: true, data: { images: next } });
     } catch (error) {
       next(error);
     }
