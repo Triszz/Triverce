@@ -17,5 +17,16 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+    proxy: {
+      // Proxy static file requests to the backend so relative
+      // /uploads/... URLs in <img src={...}> resolve correctly in dev.
+      // In production, the hosting layer (nginx / Vercel / etc.) handles
+      // serving /uploads from the same origin as the API, so no proxy
+      // is needed there.
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   },
 });

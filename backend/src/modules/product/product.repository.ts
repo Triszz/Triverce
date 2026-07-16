@@ -191,7 +191,9 @@ export class ProductRepository {
         });
 
         const attributes: VariantAttribute[] = [];
-        for (const [attrName, attrValue] of Object.entries(variantDto.attributes)) {
+        // Guard against undefined attributes (schema uses .optional()).
+        const entries = Object.entries(variantDto.attributes ?? {});
+        for (const [attrName, attrValue] of entries) {
           const normalized = attrName.toLowerCase();
 
           // upsert: create attribute if it doesn't exist
@@ -277,44 +279,49 @@ export class ProductRepository {
     urls: string[],
   ): Promise<string[] | null> {
     if (urls.length === 0) return null;
-    try {
-      // Single round-trip append via raw SQL — Prisma's update API
-      // doesn't natively expose `array_cat`.
-      const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
-        UPDATE products
-        SET images = images || ${urls}::text[],
-            updated_at = NOW()
-        WHERE id = ${productId}::uuid
-          AND deleted_at IS NULL
-        RETURNING images
-      `;
-      return rows[0]?.images ?? null;
-    } catch {
-      return null;
-    }
+    // Same strict-overwrite rationale as `setProductImages`: let raw
+    // query errors bubble so the service can return a real failure
+    // instead of a misleading "null".
+    const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
+      UPDATE products
+      SET images = images || ${urls}::text[],
+          updated_at = NOW()
+      WHERE id = ${productId}::uuid
+        AND deleted_at IS NULL
+      RETURNING images
+    `;
+    return rows[0]?.images ?? null;
   }
 
   /**
    * Replace a product's entire `images` array (used by the reorder /
    * remove flow from the edit page). Validation is enforced upstream.
+   *
+   * Strict overwrite contract: the returned `string[]` is exactly what
+   * was persisted. We deliberately let raw-query errors propagate so
+   * the service can fail loudly — a silent `return null` here turned a
+   * cast / type mismatch into a 500-only error that the dashboard
+   * couldn't see, and a swallowed exception looked like a "successful
+   * no-op" in the response (the controller would then respond 200 with
+   * an empty array, masking the real failure).
+   *
+   * Returning `null` is reserved for "row didn't match the WHERE
+   * clause" (e.g. soft-deleted or wrong id) — the service translates
+   * that into a 404.
    */
   async setProductImages(
     productId: string,
     urls: string[],
   ): Promise<string[] | null> {
-    try {
-      const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
-        UPDATE products
-        SET images = ${urls}::text[],
-            updated_at = NOW()
-        WHERE id = ${productId}::uuid
-          AND deleted_at IS NULL
-        RETURNING images
-      `;
-      return rows[0]?.images ?? null;
-    } catch {
-      return null;
-    }
+    const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
+      UPDATE products
+      SET images = ${urls}::text[],
+          updated_at = NOW()
+      WHERE id = ${productId}::uuid
+        AND deleted_at IS NULL
+      RETURNING images
+    `;
+    return rows[0]?.images ?? null;
   }
 
   async delete(id: string): Promise<boolean> {
@@ -360,7 +367,9 @@ export class ProductRepository {
       });
 
       const attributes: VariantAttribute[] = [];
-      for (const [attrName, attrValue] of Object.entries(dto.attributes)) {
+      // Guard against undefined attributes (schema uses .optional()).
+      const entries = Object.entries(dto.attributes ?? {});
+      for (const [attrName, attrValue] of entries) {
         const normalized = attrName.toLowerCase();
 
         const attr = await tx.productAttribute.upsert({
@@ -398,15 +407,60 @@ export class ProductRepository {
     if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
-    try {
-      const row = await this.prisma.productVariant.update({
+    // Whole-attribute replacement strategy. Only fire when:
+    //   1. dto.attributes is explicitly provided (not undefined)
+    //   2. It's a non-null object
+    //   3. It actually has at least one key (guards against empty {}
+    //      that might slip through via schema misconfiguration).
+    // Without (3), even a default-filled {} would trigger deleteMany
+    // and wipe the variant's attribute rows on every partial update.
+    const hasAttributes =
+      dto.attributes != null &&
+      typeof dto.attributes === "object" &&
+      Object.keys(dto.attributes as object).length > 0;
+
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.productVariant.update({
         where: { id: variantId },
         data: updateData,
       });
 
-      // Load attributes after update
-      const attrRows = await this.prisma.variantAttributeValue.findMany({
-        where: { variantId },
+      if (hasAttributes) {
+        // Wipe existing rows first so the composite PK
+        // (variantId, attributeId) doesn't collide with the new set.
+        await tx.variantAttributeValue.deleteMany({
+          where: { variantId },
+        });
+
+        for (const [attrName, attrValue] of Object.entries(
+          dto.attributes as Record<string, string>,
+        )) {
+          const normalized = attrName.toLowerCase();
+          // Empty attribute keys are skipped — Zod already enforces
+          // non-empty keys, but defensive guardrail if the frontend
+          // ever ships a stray entry.
+          if (!normalized) continue;
+
+          const attr = await tx.productAttribute.upsert({
+            where: { name: normalized },
+            update: {},
+            create: { name: normalized },
+          });
+
+          await tx.variantAttributeValue.create({
+            data: {
+              variantId: row.id,
+              attributeId: attr.id,
+              value: attrValue,
+            },
+          });
+        }
+      }
+
+      // Re-read the freshly-synced attributes so the returned entity
+      // matches what's in the database (single source of truth).
+      const attrRows = await tx.variantAttributeValue.findMany({
+        where: { variantId: row.id },
         include: { attribute: true },
       });
 
@@ -417,9 +471,7 @@ export class ProductRepository {
       }));
 
       return ProductVariantEntity.fromDatabase(row, attributes);
-    } catch {
-      return null;
-    }
+    });
   }
 
   async deleteVariant(variantId: string): Promise<boolean> {
@@ -468,71 +520,43 @@ export class ProductRepository {
   }
 
   /**
-   * Loads variants + their attributes + computed `available` stock for a product.
+   * Loads ALL variants (active and inactive) for a product, along with their
+   * attribute join rows and computed `available` stock.
    *
-   * The `available = quantity - reserved` expression is computed via raw SQL
-   * since Prisma's generated types can't subtract two columns natively.
+   * Previously used a raw SQL query with `WHERE is_active = true`, which
+   * caused deactivated variants to silently disappear from findById —
+   * breaking the product detail page and any UI that needs to render all
+   * variants regardless of their active state.
+   *
+   * This version uses Prisma's include to fetch every variant row with its
+   * attribute values and inventory in one query, avoiding the N+1 problem.
    */
   private async loadVariantsWithAttributes(
     productId: string,
   ): Promise<ProductVariantEntity[]> {
-    const variantRows = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        productId: string;
-        sku: string;
-        price: import("@prisma/client").Prisma.Decimal;
-        imageUrl: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        available: number | null;
-      }>
-    >`
-      SELECT
-        pv.id,
-        pv.product_id AS "productId",
-        pv.sku,
-        pv.price,
-        pv.image_url AS "imageUrl",
-        pv.is_active AS "isActive",
-        pv.created_at AS "createdAt",
-        pv.updated_at AS "updatedAt",
-        (inv.quantity - inv.reserved) AS available
-      FROM product_variants pv
-      LEFT JOIN inventory inv ON inv.variant_id = pv.id
-      WHERE pv.product_id = ${productId}::uuid
-        AND pv.is_active = true
-      ORDER BY pv.created_at ASC
-    `;
-
-    if (variantRows.length === 0) return [];
-
-    const variantIds = variantRows.map((v) => v.id);
-
-    const attrRows = await this.prisma.variantAttributeValue.findMany({
-      where: { variantId: { in: variantIds } },
-      include: { attribute: true },
+    const variantRows = await this.prisma.productVariant.findMany({
+      where: { productId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        // Include attribute join rows + attribute lookup in one query.
+        attributeValues: {
+          include: { attribute: true },
+        },
+        // Include inventory for the `available` computed column.
+        inventory: true,
+      },
     });
 
-    const attrsByVariantId = new Map<string, VariantAttribute[]>();
-    for (const attr of attrRows) {
-      const list = attrsByVariantId.get(attr.variantId) ?? [];
-      list.push({
-        attributeId: attr.attributeId,
-        attributeName: attr.attribute.name,
-        value: attr.value,
-      });
-      attrsByVariantId.set(attr.variantId, list);
-    }
-
-    return variantRows.map((row) =>
-      ProductVariantEntity.fromDatabase(
-        // Cast through `unknown` because the raw-SQL row is structurally
-        // identical to Prisma's ProductVariant but TS can't infer that.
+    return variantRows.map((row) => {
+      const attributes: VariantAttribute[] = row.attributeValues.map((av) => ({
+        attributeId: av.attributeId,
+        attributeName: av.attribute.name,
+        value: av.value,
+      }));
+      return ProductVariantEntity.fromDatabase(
         row as unknown as import("./product-variant.entity").ProductVariantRowWithStock,
-        attrsByVariantId.get(row.id) ?? [],
-      ),
-    );
+        attributes,
+      );
+    });
   }
 }

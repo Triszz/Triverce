@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   ArrowLeft,
   BoxIcon,
@@ -20,10 +20,16 @@ import {
   Tag,
   Trash2,
   X,
-} from 'lucide-react';
-import { cn } from '@/lib/cn';
-import { formatVnd } from '@/lib/format';
-import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+} from "lucide-react";
+import { cn } from "@/lib/cn";
+import { formatVnd } from "@/lib/format";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { toast } from "sonner";
+import { toAbsoluteUrl } from "@/lib/url";
+import {
+  IMAGE_VALIDATION_HELPER_TEXT,
+  validateImageFile,
+} from "@/lib/imageValidation";
 import {
   useCategories,
   useCreateVariant,
@@ -35,16 +41,16 @@ import {
   useUpdateVariant,
   useUploadProductImages,
   useUploadVariantImage,
-} from '../hooks/useProducts';
+} from "../hooks/useProducts";
 import type {
   Category,
   Product,
   ProductVariant,
-} from '../services/productService';
-import { variantDisplayName } from '../services/productService';
-import { VariantFormModal, type VariantFormValues } from './VariantFormModal';
+} from "../services/productService";
+import { variantDisplayName } from "../services/productService";
+import { VariantFormModal, type VariantFormValues } from "./VariantFormModal";
 
-type Tab = 'basic' | 'variants';
+type Tab = "basic" | "variants";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Basic-info form schema. Mirrors ProductCreatePage.
@@ -53,18 +59,18 @@ type Tab = 'basic' | 'variants';
 const basicFormSchema = z.object({
   name: z
     .string()
-    .min(3, 'Name must be at least 3 characters')
-    .max(255, 'Name must be at most 255 characters'),
+    .min(3, "Name must be at least 3 characters")
+    .max(255, "Name must be at most 255 characters"),
   description: z
     .string()
-    .max(5000, 'Description must be at most 5,000 characters')
+    .max(5000, "Description must be at most 5,000 characters")
     .optional()
-    .or(z.literal('')),
+    .or(z.literal("")),
   basePrice: z
-    .number({ error: 'Base price is required' })
-    .int('Price must be a whole number (VND)')
-    .min(1000, 'Minimum price is 1,000 ₫'),
-  categoryId: z.string().optional().or(z.literal('')),
+    .number({ error: "Base price is required" })
+    .int("Price must be a whole number (VND)")
+    .min(1000, "Minimum price is 1,000 ₫"),
+  categoryId: z.string().optional().or(z.literal("")),
   isActive: z.boolean(),
 });
 
@@ -84,8 +90,8 @@ type BasicFormValues = z.infer<typeof basicFormSchema>;
 export function ProductEditPage() {
   const params = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const productId = params.id ?? '';
-  const [tab, setTab] = useState<Tab>('basic');
+  const productId = params.id ?? "";
+  const [tab, setTab] = useState<Tab>("basic");
 
   const {
     data: product,
@@ -99,9 +105,9 @@ export function ProductEditPage() {
   if (isError || !product) {
     return (
       <ErrorState
-        message={(error as Error)?.message ?? 'Product not found'}
+        message={(error as Error)?.message ?? "Product not found"}
         onRetry={() => void refetch()}
-        onBack={() => navigate('/products')}
+        onBack={() => navigate("/products")}
       />
     );
   }
@@ -125,7 +131,7 @@ export function ProductEditPage() {
             <span className="font-mono text-xs">{product.slug}</span>
             <span className="mx-2">•</span>
             {product.variants?.length ?? 0} variant
-            {(product.variants?.length ?? 0) === 1 ? '' : 's'}
+            {(product.variants?.length ?? 0) === 1 ? "" : "s"}
           </p>
         </div>
       </div>
@@ -134,14 +140,14 @@ export function ProductEditPage() {
       <div className="border-b border-slate-200">
         <nav className="flex gap-6">
           <TabButton
-            active={tab === 'basic'}
-            onClick={() => setTab('basic')}
+            active={tab === "basic"}
+            onClick={() => setTab("basic")}
             icon={Package}
             label="Basic info"
           />
           <TabButton
-            active={tab === 'variants'}
-            onClick={() => setTab('variants')}
+            active={tab === "variants"}
+            onClick={() => setTab("variants")}
             icon={BoxIcon}
             label="Variants"
           />
@@ -152,10 +158,16 @@ export function ProductEditPage() {
           (e.g. staged image files) survives tab toggles. CSS toggles
           visibility — the panel layer doesn't unmount when the user
           switches tabs. The `aria-hidden` mirrors the visual state. */}
-      <div className={tab === 'basic' ? 'block' : 'hidden'} aria-hidden={tab !== 'basic'}>
+      <div
+        className={tab === "basic" ? "block" : "hidden"}
+        aria-hidden={tab !== "basic"}
+      >
         <BasicInfoSection product={product} />
       </div>
-      <div className={tab === 'variants' ? 'block' : 'hidden'} aria-hidden={tab !== 'variants'}>
+      <div
+        className={tab === "variants" ? "block" : "hidden"}
+        aria-hidden={tab !== "variants"}
+      >
         <VariantsSection product={product} />
       </div>
     </div>
@@ -193,20 +205,42 @@ function BasicInfoSection({ product }: { product: Product }) {
     () => product.images ?? [],
   );
 
-  // Re-seed `retainedImages` whenever the seller navigates to a
-  // different product. Editing in-place (e.g. after a cache invalidation
-  // triggered by the same product's mutation) doesn't remount the
-  // section, so we explicitly compare against product.id and skip the
-  // re-seed on cache-update re-renders. The ref comparison during
-  // render is intentional — using a useEffect here would cause the
-  // user to see a flash of the previous product's gallery on every
-  // cache refresh.
+  // Re-seed `retainedImages` in two cases:
+  //
+  //   1. The seller navigates to a different product (product.id
+  //      changes) — the section doesn't remount, so we explicitly
+  //      re-seed here.
+  //
+  //   2. React Query delivers new server data for the *same* product
+  //      (the `images` array reference changes). This happens after
+  //      `useSetProductImages.onSuccess` invalidates the cache and the
+  //      refetch completes. Without this branch, the local
+  //      `retainedImages` would lag the server until a hard page
+  //      refresh. `handleSaveGallery` already calls
+  //      `setRetainedImages(finalImages)` proactively, but other
+  //      flows (e.g. variant flow that also invalidates) benefit from
+  //      this sync too.
+  //
+  // The ref comparisons during render are intentional — using a
+  // `useEffect` here would cause a flash of the previous gallery on
+  // every cache refresh.
   const seededProductIdRef = useRef<string | null>(null);
+  const seededImagesRef = useRef<string[] | null>(null);
   // eslint-disable-next-line react-hooks/refs
   if (seededProductIdRef.current !== product.id) {
+    const next = product.images ?? [];
     // eslint-disable-next-line react-hooks/refs
     seededProductIdRef.current = product.id;
-    setRetainedImages(product.images ?? []);
+    // eslint-disable-next-line react-hooks/refs
+    seededImagesRef.current = next;
+    setRetainedImages(next);
+  } else {
+    const next = product.images ?? [];
+    if (seededImagesRef.current !== next) {
+      // eslint-disable-next-line react-hooks/refs
+      seededImagesRef.current = next;
+      setRetainedImages(next);
+    }
   }
 
   // Clean up object URLs whenever a file leaves the staged list — leaks
@@ -228,14 +262,12 @@ function BasicInfoSection({ product }: { product: Product }) {
     const filtered: StagedFile[] = [];
     for (const file of list) {
       if (filtered.length >= maxExisting) break;
-      if (!file.type.startsWith('image/')) {
-        setStagedError(
-          `Skipped "${file.name}" — only image files (JPEG, PNG, WebP).`,
-        );
-        continue;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        setStagedError(`Skipped "${file.name}" — over 5 MB.`);
+      // Strict whitelist — must be JPEG/PNG/WebP AND under 5 MB.
+      // Surfaces a toast + the inline `stagedError`; nothing gets staged.
+      const reason = validateImageFile(file);
+      if (reason) {
+        setStagedError(reason);
+        toast.error(reason);
         continue;
       }
       filtered.push({
@@ -246,7 +278,7 @@ function BasicInfoSection({ product }: { product: Product }) {
     }
     setStagedFiles((prev) => [...prev, ...filtered]);
     // Reset native input so picking the same file twice still triggers onChange.
-    event.target.value = '';
+    event.target.value = "";
   };
 
   const removeStaged = (id: string) =>
@@ -285,11 +317,16 @@ function BasicInfoSection({ product }: { product: Product }) {
   const isGalleryDirty = retainedChanged || stagedFiles.length > 0;
 
   // Single commit point for the gallery. We:
-  //   1. Upload the staged files (gets back an array of new URLs).
-  //   2. Set the final images[] array = retained + new, via PUT.
-  // On success, both `useUploadProductImages` and `useSetProductImages`
-  // invalidate the product cache, so the gallery re-renders from
-  // server truth.
+  //   1. Upload the staged files (gets back raw UploadResult rows).
+  //   2. Project each result → URL string (defensive: accept either
+  //      `url`, `absoluteUrl`, or `path` to insulate us from a future
+  //      API shape change; bad rows are skipped so we never pass
+  //      `{}` placeholders into the PUT).
+  //   3. Send the final images[] = retained + new via PUT (wholesale
+  //      replacement; this is the only path that mutates
+  //      `Product.images` — see backend `upload.controller.ts`).
+  // Errors from either step are surfaced by the hooks themselves, so
+  // local state stays intact and the seller can retry.
   const handleSaveGallery = async () => {
     if (!isGalleryDirty) return;
     try {
@@ -298,26 +335,56 @@ function BasicInfoSection({ product }: { product: Product }) {
         const result = await uploadImages.mutateAsync(
           stagedFiles.map((s) => s.file),
         );
-        // `useUploadProductImages` already appends to the server's
-        // images[] and invalidates the cache. We have to follow up
-        // with `setProductImages` to *replace* the array with our
-        // intended final shape (retained + newly appended in
-        // controlled order). The backend's `setProductImages` is a
-        // wholesale PUT — we send the full desired array.
-        newUrls = result.images.map((u) => u.url);
+        const rows = Array.isArray(result?.images) ? result.images : [];
+        newUrls = rows
+          .map((u) => {
+            if (typeof u === "string") return u;
+            if (u && typeof u === "object") {
+              const candidate =
+                (u as Record<string, unknown>).absoluteUrl ??
+                (u as Record<string, unknown>).url ??
+                (u as Record<string, unknown>).path;
+              return typeof candidate === "string" ? candidate : null;
+            }
+            return null;
+          })
+          .filter((u): u is string => Boolean(u));
       }
       const finalImages = [...retainedImages, ...newUrls];
+      // Defensive gate: reject any corrupt value before it reaches the
+      // backend. If any URL is not a non-empty string, abort and let the
+      // catch block surface the error so the seller sees a toast and the
+      // DB is never corrupted with a bad value.
+      const badUrl = finalImages.find(
+        (img) =>
+          typeof img !== "string" || img.trim() === "" || img === "undefined",
+      );
+      if (badUrl !== undefined) {
+        throw new Error(
+          `Corrupt image value detected before save: ${JSON.stringify(badUrl)}`,
+        );
+      }
       if (
         finalImages.length !== originalImages.length ||
         finalImages.some((u, i) => u !== originalImages[i])
       ) {
         await setImages.mutateAsync(finalImages);
       }
-      // Clear staged state — the backend now owns them.
+      // Backend now owns the full final array. We must explicitly
+      // promote the staged uploads + retained set into the live
+      // `retainedImages` slot — otherwise `clearStaged()` below removes
+      // the new previews and the user sees the new images vanish
+      // (the local state would otherwise only re-sync on a hard page
+      // refresh, because the seed effect below uses a `product.id`
+      // ref-guard and skips the re-seed for the same product id).
+      setRetainedImages(finalImages);
       clearStaged();
-    } catch {
-      // Toast handled in mutations; keep local state intact so the
-      // seller can retry without re-picking files.
+      toast.success("Gallery updated successfully");
+    } catch (err) {
+      // Keep local state intact so the seller can retry without re-picking files.
+      const msg =
+        err instanceof Error ? err.message : "Failed to update gallery";
+      toast.error(msg);
     }
   };
 
@@ -325,23 +392,36 @@ function BasicInfoSection({ product }: { product: Product }) {
 
   const sortedCategories = useMemo<Category[]>(() => {
     if (!categories) return [];
-    return [...categories]
-      .filter((c) => c.isActive)
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  }, [categories]);
+    const selectedId = product.categoryId;
+    // Always include the product's currently-selected category, even if it
+    // is marked inactive — otherwise the <option> matching `defaultValues`
+    // is missing and the <select> falls back to the placeholder, which
+    // looks like a binding bug. Inactive categories we didn't select are
+    // hidden from the dropdown.
+    const activeList = [...categories].filter((c) => c.isActive);
+    if (selectedId && !activeList.some((c) => c.id === selectedId)) {
+      const selected = categories.find((c) => c.id === selectedId);
+      if (selected) activeList.push(selected);
+    }
+    return activeList.sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+    );
+  }, [categories, product.categoryId]);
 
   const {
     register,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors, isDirty },
     reset,
   } = useForm<BasicFormValues>({
     resolver: zodResolver(basicFormSchema),
     defaultValues: {
       name: product.name,
-      description: product.description ?? '',
+      description: product.description ?? "",
       basePrice: product.basePrice,
-      categoryId: product.categoryId ?? '',
+      categoryId: product.categoryId ?? "",
       isActive: product.isActive,
     },
   });
@@ -352,13 +432,25 @@ function BasicInfoSection({ product }: { product: Product }) {
   useEffect(() => {
     reset({
       name: product.name,
-      description: product.description ?? '',
+      description: product.description ?? "",
       basePrice: product.basePrice,
-      categoryId: product.categoryId ?? '',
+      categoryId: product.categoryId ?? "",
       isActive: product.isActive,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
+
+  // Race-condition guard: when `categories` arrives (including on cold F5),
+  // the <option> elements finally exist in the DOM. `register` already set
+  // the form value correctly, but the browser dropped the visual selection
+  // because the matching <option> wasn't there yet. Re-apply it now that
+  // the options are populated.
+  useEffect(() => {
+    if (!categories) return;
+    const current = getValues("categoryId");
+    setValue("categoryId", current, { shouldDirty: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories]);
 
   const onSubmit = async (values: BasicFormValues) => {
     try {
@@ -389,7 +481,7 @@ function BasicInfoSection({ product }: { product: Product }) {
           id="name"
           type="text"
           className={inputClass(Boolean(errors.name?.message))}
-          {...register('name')}
+          {...register("name")}
         />
       </Field>
 
@@ -403,7 +495,7 @@ function BasicInfoSection({ product }: { product: Product }) {
           id="description"
           rows={4}
           className={`${inputClass(Boolean(errors.description?.message))} resize-y`}
-          {...register('description')}
+          {...register("description")}
         />
       </Field>
 
@@ -411,7 +503,6 @@ function BasicInfoSection({ product }: { product: Product }) {
         label="Product gallery"
         htmlFor="product-images-add"
         error={stagedError ?? undefined}
-        hint={`Up to 10 images. The first image (${'"main"'}) appears as the thumbnail in listings and is used as the default in the storefront.`}
       >
         <ProductImageGallery
           retainedImages={retainedImages}
@@ -422,21 +513,25 @@ function BasicInfoSection({ product }: { product: Product }) {
           onRemoveStaged={removeStaged}
         />
 
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
+        {/* Top action row: all interactive controls in one horizontal line.
+            Helper text moves to a separate row below so it doesn't squeeze
+            the buttons or wrap unpredictably at narrow widths. */}
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          {/* Add images (file picker masquerading as a button). */}
           <label
             htmlFor="product-images-add"
             className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 cursor-pointer transition-colors"
           >
             <ImagePlus size={16} aria-hidden />
             {stagedFiles.length > 0
-              ? 'Add more images'
+              ? "Add more images"
               : retainedImages.length > 0
-                ? 'Add images'
-                : 'Choose images'}
+                ? "Add images"
+                : "Choose images"}
             <input
               id="product-images-add"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               multiple
               onChange={handleStageFiles}
               className="sr-only"
@@ -459,7 +554,7 @@ function BasicInfoSection({ product }: { product: Product }) {
                 Saving gallery…
               </>
             ) : (
-              'Save gallery'
+              "Save gallery"
             )}
           </button>
 
@@ -480,6 +575,18 @@ function BasicInfoSection({ product }: { product: Product }) {
               : `${retainedImages.length}/10 images — gallery matches server`}
           </span>
         </div>
+
+        {/* Helper text row — sits below the action row so it never
+            competes with the buttons for horizontal space. */}
+        <div className="flex flex-col gap-1 mt-3 text-sm text-slate-500">
+          <span>
+            Up to 10 images. The first image ({'"main"'}) appears as the
+            thumbnail in listings and is used as the default in the storefront.
+          </span>
+          {/* Validation rules highlighted in red so the strict file
+              constraints stand out — sellers should not miss them. */}
+          <span className="text-red-500">{IMAGE_VALIDATION_HELPER_TEXT}</span>
+        </div>
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -495,7 +602,7 @@ function BasicInfoSection({ product }: { product: Product }) {
             min={1000}
             step={1000}
             className={inputClass(Boolean(errors.basePrice?.message))}
-            {...register('basePrice', { valueAsNumber: true })}
+            {...register("basePrice", { valueAsNumber: true })}
           />
         </Field>
 
@@ -503,14 +610,17 @@ function BasicInfoSection({ product }: { product: Product }) {
           label="Category"
           htmlFor="categoryId"
           error={errors.categoryId?.message}
-          hint={isLoadingCategories ? 'Loading categories…' : 'Optional'}
+          hint={isLoadingCategories ? "Loading categories…" : "Optional"}
         >
           <select
             id="categoryId"
             className={inputClass(Boolean(errors.categoryId?.message))}
-            {...register('categoryId')}
+            disabled={isLoadingCategories}
+            {...register("categoryId")}
           >
-            <option value="">— Select a category —</option>
+            <option value="">
+              {isLoadingCategories ? "Loading categories…" : "— Select a category —"}
+            </option>
             {sortedCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -524,7 +634,7 @@ function BasicInfoSection({ product }: { product: Product }) {
         <input
           type="checkbox"
           className="w-4 h-4 rounded border-slate-300 text-[#002b5b] focus:ring-[#002b5b]/20"
-          {...register('isActive')}
+          {...register("isActive")}
         />
         <span>Product is published (visible in storefront)</span>
       </label>
@@ -546,7 +656,7 @@ function BasicInfoSection({ product }: { product: Product }) {
               <Loader2 size={16} className="animate-spin" aria-hidden /> Saving…
             </>
           ) : (
-            'Save changes'
+            "Save changes"
           )}
         </button>
       </div>
@@ -566,7 +676,7 @@ function VariantsSection({ product }: { product: Product }) {
   // Used after create-variant for the staged image picked in the modal.
   const uploadVariantImage = useUploadVariantImage(product.id);
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(
     null,
@@ -596,7 +706,8 @@ function VariantsSection({ product }: { product: Product }) {
     setModalOpen(true);
   };
 
-  const requestDelete = (variant: ProductVariant) => setPendingDeleteVariant(variant);
+  const requestDelete = (variant: ProductVariant) =>
+    setPendingDeleteVariant(variant);
   const cancelDelete = () => setPendingDeleteVariant(null);
 
   const confirmDelete = async () => {
@@ -628,6 +739,12 @@ function VariantsSection({ product }: { product: Product }) {
             sku: values.sku,
             price: values.price,
             isActive: values.isActive,
+            // Wholesale attribute replacement — the backend syncs
+            // `variant_attribute_values` via deleteMany + create in a
+            // single transaction. Skipping this previously caused
+            // attribute edits to silently no-op (the DTO omitted
+            // `attributes` and the repo never touched the join table).
+            attributes,
           },
         });
         if (stagedImage) {
@@ -666,9 +783,16 @@ function VariantsSection({ product }: { product: Product }) {
         }
       }
       setModalOpen(false);
-    } catch {
-      // create/update error — toast surfaced via mutation onError; modal
-      // stays open so the seller can fix the form and retry.
+    } catch (err) {
+      // Logged by the mutation hooks' onError (toast). We also keep the
+      // modal open so the seller can fix the form and retry without
+      // losing their input — except when the mutation itself was the
+      // root cause of a hard DB failure (e.g. unique-constraint or
+      // FK violation), in which case the modal stays open too. The
+      // catch is intentionally broad so the modal never closes on a
+      // failed save.
+      const msg = err instanceof Error ? err.message : "Failed to save variant";
+      toast.error(msg);
     }
   };
 
@@ -680,7 +804,8 @@ function VariantsSection({ product }: { product: Product }) {
           <div>
             <h2 className="text-base font-semibold text-slate-900">Variants</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              {variants.length} total · at least one variant is required per product.
+              {variants.length} total · at least one variant is required per
+              product.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -741,10 +866,10 @@ function VariantsSection({ product }: { product: Product }) {
       </div>
 
       <p className="text-xs text-slate-500">
-        Need to leave this page?{' '}
+        Need to leave this page?{" "}
         <button
           type="button"
-          onClick={() => navigate('/products')}
+          onClick={() => navigate("/products")}
           className="text-[#002b5b] hover:underline font-medium cursor-pointer"
         >
           Back to products
@@ -772,7 +897,7 @@ function VariantsSection({ product }: { product: Product }) {
         description={
           pendingDeleteVariant
             ? `“${variantDisplayName(pendingDeleteVariant)}” (SKU ${pendingDeleteVariant.sku}) will be permanently removed.`
-            : ''
+            : ""
         }
         confirmText="Delete variant"
         cancelText="Keep variant"
@@ -805,19 +930,19 @@ function VariantRow({
   const cancelEdit = () => setDraftQty(null);
 
   const stockBadge = useMemo(() => {
-    const status = variant.stockStatus ?? 'in_stock';
+    const status = variant.stockStatus ?? "in_stock";
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
-          status === 'in_stock' && 'bg-emerald-50 text-emerald-700',
-          status === 'low_stock' && 'bg-amber-50 text-amber-700',
-          status === 'out_of_stock' && 'bg-red-50 text-red-700',
+          "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium",
+          status === "in_stock" && "bg-emerald-50 text-emerald-700",
+          status === "low_stock" && "bg-amber-50 text-amber-700",
+          status === "out_of_stock" && "bg-red-50 text-red-700",
         )}
       >
-        {status === 'in_stock' && 'In stock'}
-        {status === 'low_stock' && 'Low stock'}
-        {status === 'out_of_stock' && 'Out of stock'}
+        {status === "in_stock" && "In stock"}
+        {status === "low_stock" && "Low stock"}
+        {status === "out_of_stock" && "Out of stock"}
       </span>
     );
   }, [variant.stockStatus]);
@@ -875,7 +1000,7 @@ function VariantRow({
               disabled={setInventory.isPending}
               className="px-2.5 py-1 text-xs font-medium rounded-lg bg-[#002b5b] text-white hover:bg-[#001f3f] disabled:opacity-50 cursor-pointer"
             >
-              {setInventory.isPending ? '…' : 'Save'}
+              {setInventory.isPending ? "…" : "Save"}
             </button>
             <button
               type="button"
@@ -1000,9 +1125,7 @@ function ProductImageGallery({
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
         <ImageIcon size={28} className="mx-auto text-slate-300" aria-hidden />
-        <p className="mt-2 text-sm font-medium text-slate-700">
-          No images yet
-        </p>
+        <p className="mt-2 text-sm font-medium text-slate-700">No images yet</p>
         <p className="mt-1 text-xs text-slate-500">
           Add up to 10 images. The first one becomes the storefront thumbnail.
         </p>
@@ -1019,18 +1142,16 @@ function ProductImageGallery({
           className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50 group"
         >
           <img
-            src={url}
+            src={toAbsoluteUrl(url)}
             alt={`Product image ${index + 1}`}
             className={cn(
-              'w-full h-full object-cover',
-              isPersisting && 'opacity-70',
+              "w-full h-full object-cover",
+              isPersisting && "opacity-70",
             )}
             loading="lazy"
           />
           {index === 0 && (
-            <span
-              className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#002b5b] text-white text-[11px] font-medium shadow"
-            >
+            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#002b5b] text-white text-[11px] font-medium shadow">
               <Star size={11} aria-hidden /> Ảnh đại diện
             </span>
           )}
@@ -1099,12 +1220,12 @@ function EmptyVariants({
         <BoxIcon size={20} className="text-slate-500" aria-hidden />
       </span>
       <h3 className="text-sm font-semibold text-slate-900">
-        {hasSearch ? 'No variants match your search' : 'No variants yet'}
+        {hasSearch ? "No variants match your search" : "No variants yet"}
       </h3>
       <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
         {hasSearch
-          ? 'Try clearing the filter or adjusting your terms.'
-          : 'Variants distinguish SKUs (color, size, storage…). Every product must have at least one.'}
+          ? "Try clearing the filter or adjusting your terms."
+          : "Variants distinguish SKUs (color, size, storage…). Every product must have at least one."}
       </p>
       {!hasSearch && (
         <button
@@ -1139,10 +1260,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-2 px-1 pb-3 text-sm font-medium border-b-2 transition-colors cursor-pointer',
+        "inline-flex items-center gap-2 px-1 pb-3 text-sm font-medium border-b-2 transition-colors cursor-pointer",
         active
-          ? 'border-[#002b5b] text-[#002b5b]'
-          : 'border-transparent text-slate-500 hover:text-slate-900',
+          ? "border-[#002b5b] text-[#002b5b]"
+          : "border-transparent text-slate-500 hover:text-slate-900",
       )}
     >
       <Icon size={14} aria-hidden />
@@ -1267,11 +1388,11 @@ function Field({
 
 function inputClass(hasError: boolean): string {
   return [
-    'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900',
-    'placeholder:text-slate-400 shadow-sm transition-colors',
-    'focus:outline-none focus:ring-2 focus:ring-[#002b5b]/20 focus:border-[#002b5b]',
+    "w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900",
+    "placeholder:text-slate-400 shadow-sm transition-colors",
+    "focus:outline-none focus:ring-2 focus:ring-[#002b5b]/20 focus:border-[#002b5b]",
     hasError
-      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
-      : 'border-slate-200',
-  ].join(' ');
+      ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+      : "border-slate-200",
+  ].join(" ");
 }

@@ -193,7 +193,10 @@ export class ProductService {
     }
 
     const updated = await this.productRepository.updateVariant(variantId, dto);
-    return updated!;
+    if (!updated) {
+      throw new NotFoundError(`Variant with id "${variantId}" not found`);
+    }
+    return updated;
   }
 
   // Delete variant

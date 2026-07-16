@@ -1,11 +1,32 @@
 import { z } from "zod";
 
-// Dedicated "set images" schema. Lives in the controller rather than
-// product.dto.ts because it isn't a CRUD-shaped DTO — it's a wholesale
-// gallery replacement used by the dashboard's reorder/remove affordances.
+/**
+ * Schema for `PUT /api/products/:id/images` — the dashboard's "set the
+ * final gallery" endpoint.
+ *
+ * Why not `z.url()`: the upload service returns **relative** paths like
+ * `/uploads/products/<productId>-<ts>.webp`. The browser renders them
+ * with the API origin prepended, and storing absolute URLs would break
+ * every existing record if the backend host ever changes (e.g. moving
+ * from `localhost:3000` to a production domain, or swapping CDN).
+ * Relative paths also keep the DB row portable across environments.
+ *
+ * Instead we enforce:
+ *   • 0–20 entries (matches the upload controller's `array('images', 10)`
+ *     plus headroom for legacy products).
+ *   • Each entry is a non-empty string ≤ 2048 chars. We accept either a
+ *     relative `/uploads/...` path or a fully-qualified URL — both are
+ *     valid sources of truth because the dashboard may someday seed
+ *     images from an external CDN.
+ */
 const SetProductImagesSchema = z.object({
   images: z
-    .array(z.url("Invalid image URL").max(2048))
+    .array(
+      z
+        .string()
+        .min(1, "Image URL cannot be empty")
+        .max(2048, "Image URL is too long"),
+    )
     .max(20, "Maximum of 20 images per product"),
 });
 
@@ -133,6 +154,10 @@ export class ProductController {
   // Update variant
   updateVariant = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // Structured log so we can see exactly what the frontend sent before
+      // Zod validation runs. Useful for debugging silent-attribute-drop
+      // issues without needing to instrument the schema itself.
+      console.log("[updateVariant] raw req.body:", JSON.stringify(req.body));
       const variant = await this.productService.updateVariant(
         req.params.id as string,
         req.params.vid as string,
@@ -150,19 +175,42 @@ export class ProductController {
 
   // Set the entire gallery array (drag-to-reorder, remove). Validates
   // the URL list and persists via the service. Returns the final list.
+  //
+  // Wire format (matches `productService.setProductImages` and the
+  // frontend `productService.setProductImages` helper):
+  //
+  //   PUT /api/products/:id/images
+  //   { "images": ["/uploads/products/abc.webp", "..."] }
+  //
+  // Anything other than `{ images: string[] }` is rejected with 400 +
+  // a structured Zod error so the dashboard can render it.
   setImages = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // Explicit destructuring per the API contract. We log the
+      // received shape on parse failure so a future mismatch between
+      // frontend and backend (e.g. someone wraps the body one extra
+      // time) is diagnosable from the server log alone.
       const parsed = SetProductImagesSchema.safeParse(req.body);
       if (!parsed.success) {
+        const received = {
+          type: typeof req.body,
+          isArray: Array.isArray(req.body),
+          keys:
+            req.body && typeof req.body === "object"
+              ? Object.keys(req.body as Record<string, unknown>)
+              : [],
+        };
         return res.status(400).json({
           success: false,
-          message: "Invalid image list",
+          message: "Invalid image list — expected { images: string[] }",
+          received,
           errors: parsed.error.flatten(),
         });
       }
+      const { images } = parsed.data;
       const next = await this.productService.setProductImages(
         req.params.id as string,
-        parsed.data.images,
+        images,
         req.user!,
       );
       res.status(200).json({ success: true, data: { images: next } });

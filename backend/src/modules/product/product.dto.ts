@@ -15,12 +15,18 @@ const VariantSchema = z.object({
   imageUrl: z.url("Invalid imageUrl").optional(),
   isActive: z.boolean().default(true),
   // attributes: { "color": "Red", "size": "XL" }
+  // NOTE: do NOT add .default({}) here — it causes Zod to silently fill
+  // in {} when the field is absent in a PATCH payload, which makes the
+  // repository's shouldSyncAttributes guard fire and delete all existing
+  // attribute rows even when the caller only updated SKU/price. Using
+  // .optional() means absent → undefined (not auto-filled), which is the
+  // correct "don't touch attributes" signal for the update path.
   attributes: z
     .record(
       z.string().min(1), // key: attribute name ("color")
-      z.string().min(1), // Value: attribute value ("Red")
+      z.string().min(1), // value: attribute value ("Red")
     )
-    .default({}),
+    .optional(),
 });
 
 // Create Product
@@ -67,8 +73,13 @@ export const UpdateProductSchemaWithImages = UpdateProductSchema.merge(
 export const AddVariantSchema = VariantSchema;
 
 // Update Variant
-export const UpdateVariantSchema = VariantSchema.omit({ attributes: true }) // Cannot change attributes after creation
-  .partial();
+//
+// NOTE: attributes ARE updatable. The earlier `.omit({ attributes: true })`
+// short-circuited the PATCH endpoint into a SKU/price/image-only mutation,
+// which silently dropped any edits to the variant's color/size/etc. row in
+// `variant_attribute_values`. We keep the same `record<string,string>` shape
+// as `AddVariantSchema` so the client can reuse its existing payload.
+export const UpdateVariantSchema = VariantSchema.partial();
 
 // Query Params - filter, sort, pagination
 export const ProductQuerySchema = z

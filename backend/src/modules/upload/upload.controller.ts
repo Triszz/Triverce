@@ -1,29 +1,27 @@
 import { Request, Response, NextFunction } from "express";
-import {
-  IUploadService,
-  UploadResult,
-} from "../../core/interfaces/IUploadService";
+import { IUploadService } from "../../core/interfaces/IUploadService";
 import { BadRequestError, NotFoundError } from "../../core/errors/AppError";
-import { ProductService } from "../product/product.service";
 
 export class UploadController {
-  constructor(
-    private uploadService: IUploadService,
-    private productService: ProductService,
-  ) {}
+  constructor(private uploadService: IUploadService) {}
 
   /**
-   * Upload one or more product images and **persist them on the product row**.
+   * Upload one or more product images.
    *
    * Form field: `images` (mulipart, multer.array('images', 10)).
-   * Returns the freshly stored `images[]` array (already persisted) so
-   * the dashboard can reflect the new state without a second round-trip.
    *
-   * Why the upload controller owns persistence: `LocalUploadService` is
-   * composed as a singleton and stays I/O-only. The product service has
-   * the ownership check + transactional semantics we need; we wire the
-   * two together here rather than coupling the upload module to the
-   * product module.
+   * Returns the freshly stored `UploadResult[]` (one per uploaded file).
+   * **Does NOT mutate the Product row.** The dashboard orchestrates the
+   * final gallery shape via `PUT /api/products/:id/images`; if this
+   * endpoint also auto-appended, a partial failure (e.g. PUT rejected by
+   * Zod) would leave the database with ghost rows while the dashboard
+   * believed the deletion succeeded. Keeping I/O pure here means the
+   * upload endpoint is a single, atomic side-effect: write file → return
+   * URL. Whatever doesn't make it into `PUT /api/products/:id/images`
+   * is never persisted.
+   *
+   * Note: the variant image endpoint also follows the same contract —
+   * the variant PATCH flow is what attaches the URL to a row.
    */
   uploadProductImages = async (
     req: Request,
@@ -35,33 +33,23 @@ export class UploadController {
       if (files.length === 0) throw new BadRequestError("No files uploaded");
 
       const productId = req.params.productId as string;
-
-      // Process files first so we have URLs, then append to the row.
-      // On failure during persistence we DON'T roll back the uploaded
-      // files (the dashboard can retry the persistence via PUT /images);
-      // the trade-off here is simpler than a cross-table transaction.
-      const uploaded: UploadResult[] = await this.uploadService.uploadProductImages(
+      const uploaded = await this.uploadService.uploadProductImages(
         files,
         productId,
-      );
-      const urls = uploaded.map((u) => u.url);
-      const storedImages = await this.productService.appendProductImages(
-        productId,
-        urls,
-        req.user!,
       );
 
       res.status(201).json({
         success: true,
-        data: { images: uploaded, storedImages },
+        data: { images: uploaded },
       });
     } catch (error) {
       next(error);
     }
   };
 
-  // Backwards-compat single-file endpoint. Dashboard doesn't use it
-  // anymore; the buyer-variant upload still works as-is.
+  // Legacy single-image endpoint. Dashboard no longer calls this — the
+  // seller flow is multi-image. Kept for backwards compatibility with
+  // any out-of-band scripts. As above, does NOT mutate the product row.
   uploadProductImage = async (
     req: Request,
     res: Response,
@@ -73,11 +61,6 @@ export class UploadController {
       const result = await this.uploadService.uploadProductImage(
         req.file,
         req.params.productId as string,
-      );
-      await this.productService.appendProductImages(
-        req.params.productId as string,
-        [result.url],
-        req.user!,
       );
 
       res.status(201).json({

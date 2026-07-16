@@ -56,27 +56,41 @@ export class ProductEntity {
   }
 
   /**
-   * The image list we actually serve to clients — merges the persisted
-   * `images[]` with any variant `imageUrl` that hasn't been migrated
-   * over yet (legacy products created before the multi-image rollout).
+   * The image list we actually serve to clients.
    *
-   * Order preserved: stored images first, then any *unique* variant
-   * images appended. We de-duplicate by URL so a variant image that
-   * somehow already lives in `images[]` (e.g. after a future backfill)
-   * doesn't show up twice in the gallery.
+   * Two modes:
+   *
+   *   1. **Legacy mode** — the product was created *before* the multi-image
+   *      rollout, so `images[]` is still empty. We synthesize a gallery
+   *      by appending every variant's `imageUrl`, preserving stored
+   *      order first, then de-duplicating by URL.
+   *
+   *   2. **Authored mode** — the seller has touched the gallery at least
+   *      once (via the dashboard's PUT /images endpoint or via a variant
+   *      create). In this mode `images[]` is the source of truth; we
+   *      must **NOT** re-inject variant imageUrls because that would
+   *      make "delete image" a no-op on the storefront: the deleted URL
+   *      would come right back through the variant fallback.
    *
    * Read-only — returns a fresh array per call so consumers can mutate.
    */
   getEffectiveImages(): string[] {
     const stored = [...this.images];
-    const seen = new Set(stored);
+    // Authored mode: trust the seller's `images[]` exactly. No variant
+    // fallback. This is the fix for the "I deleted an image and it came
+    // back after refresh" bug.
+    if (stored.length > 0) return stored;
+
+    // Legacy mode: synthesize a gallery from variant imageUrls only.
+    const seen = new Set<string>();
+    const out: string[] = [];
     for (const variant of this.variants) {
       if (!variant.imageUrl) continue;
       if (seen.has(variant.imageUrl)) continue;
       seen.add(variant.imageUrl);
-      stored.push(variant.imageUrl);
+      out.push(variant.imageUrl);
     }
-    return stored;
+    return out;
   }
 
   static fromDatabase(

@@ -199,12 +199,18 @@ export function useSetVariantInventory(productId: string) {
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * Multi-image upload hook. Replaces the old singular counterpart.
+ * Multi-image upload hook.
  *
- * The backend now persists `images[]` on the product row in the same
- * call (via `appendProductImages`), so the dashboard doesn't need to
- * follow up with a PATCH — we only invalidate queries so the gallery
- * re-renders with the server-truth array.
+ * Returns the raw `UploadResult[]` from the server (one per uploaded
+ * file). Does **not** toast on success — the Save-gallery flow owns the
+ * user-facing toast because that's the point where the upload is
+ * actually committed to the database. We still invalidate the product
+ * cache here so the dashboard re-renders if a *different* surface
+ * (e.g. a script) uploads files separately.
+ *
+ * No DB mutation happens in the upload endpoint — see backend
+ * `upload.controller.ts`. The dashboard's Save button is responsible
+ * for calling `setProductImages` with the final array.
  */
 export function useUploadProductImages(productId: string) {
   const queryClient = useQueryClient();
@@ -216,11 +222,7 @@ export function useUploadProductImages(productId: string) {
       }
       return productService.uploadProductImages(productId, files);
     },
-    onSuccess: (result) => {
-      const count = result.images.length;
-      toast.success(
-        count === 1 ? 'Product image uploaded' : `${count} product images uploaded`,
-      );
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: productKey(productId) });
       queryClient.invalidateQueries({ queryKey: PRODUCTS_KEY });
     },

@@ -5,7 +5,12 @@ import { z } from 'zod';
 import { ImageIcon, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { formatVnd } from '@/lib/format';
+import { toast } from 'sonner';
 import type { ProductVariant } from '../services/productService';
+import {
+  IMAGE_VALIDATION_HELPER_TEXT,
+  validateImageFile,
+} from '@/lib/imageValidation';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Form schema — matches what's needed for the seller UI, not a verbatim
@@ -221,12 +226,16 @@ export function VariantFormModal({
       // "Cancel" on the file dialog — leave whatever was already staged.
       return;
     }
-    if (!file.type.startsWith('image/')) {
-      setImageError('Please choose an image file (JPEG, PNG, or WebP).');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setImageError('Image must be smaller than 5 MB.');
+    // Shared validator: must be JPEG/PNG/WebP and under 5 MB. On
+    // failure, both the inline error AND a toast surface so the seller
+    // gets feedback even if they miss the inline message.
+    const reason = validateImageFile(file);
+    if (reason) {
+      setImageError(reason);
+      toast.error(reason);
+      // Reset native input so picking the same (now-rejected) file
+      // still triggers onChange on retry.
+      event.target.value = '';
       return;
     }
 
@@ -288,7 +297,7 @@ export function VariantFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X size={18} aria-hidden />
@@ -391,11 +400,15 @@ export function VariantFormModal({
                   <input
                     id="variant-image"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     onChange={handleImageChange}
                     className="sr-only"
                   />
                 </label>
+
+                <span className="text-[11px] text-slate-500">
+                  {IMAGE_VALIDATION_HELPER_TEXT}
+                </span>
 
                 {imageFile && (
                   <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
@@ -488,7 +501,7 @@ export function VariantFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -496,7 +509,7 @@ export function VariantFormModal({
             type="submit"
             form="variant-form"
             disabled={isSubmitting}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm cursor-pointer"
           >
             {isSubmitting
               ? 'Saving…'

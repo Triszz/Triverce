@@ -14,8 +14,10 @@ import {
 import { cn } from '@/lib/cn';
 import { useCategories, useCreateProduct } from '../hooks/useProducts';
 import type { Category } from '../services/productService';
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // matches backend multer limit
+import {
+  IMAGE_VALIDATION_HELPER_TEXT,
+  validateImageFile,
+} from '@/lib/imageValidation';
 
 const productFormSchema = z.object({
   name: z
@@ -118,14 +120,13 @@ export function ProductCreatePage() {
     const next: StagedFile[] = [];
     for (const file of list) {
       if (next.length >= remaining) break;
-      if (!file.type.startsWith('image/')) {
-        setStagedError(
-          `Skipped "${file.name}" — only image files (JPEG, PNG, WebP).`,
-        );
-        continue;
-      }
-      if (file.size > MAX_IMAGE_BYTES) {
-        setStagedError(`Skipped "${file.name}" — over 5 MB.`);
+      // Strict whitelist — must be JPEG/PNG/WebP AND under 5 MB.
+      // Surfaced as a toast (the dashboard's canonical error sink) and
+      // as the inline `stagedError` for the persistent hint area.
+      const reason = validateImageFile(file);
+      if (reason) {
+        setStagedError(reason);
+        toast.error(reason);
         continue;
       }
       const url = URL.createObjectURL(file);
@@ -263,7 +264,7 @@ export function ProductCreatePage() {
                 Click to upload images
               </span>
               <span className="text-xs text-slate-500 mt-1">
-                PNG, JPG, or WebP — pick multiple at once
+                {IMAGE_VALIDATION_HELPER_TEXT}
               </span>
               <input
                 id="create-images-add"
@@ -341,7 +342,7 @@ export function ProductCreatePage() {
                   <X size={14} aria-hidden /> Clear all
                 </button>
                 <span className="text-xs text-slate-500">
-                  {stagedFiles.length}/10 staged · images upload on save
+                  {stagedFiles.length}/10 staged · {IMAGE_VALIDATION_HELPER_TEXT}
                 </span>
               </div>
             </>

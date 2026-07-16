@@ -121,6 +121,15 @@ export interface UpdateVariantDTO {
   price?: number;
   imageUrl?: string | null;
   isActive?: boolean;
+  /**
+   * Wholesale replacement of the variant's attribute set. Matches the
+   * backend's `record<string,string>` shape — keys are the attribute
+   * names (e.g. "color", "size"), values are the variant's value
+   * (e.g. "Red", "M"). When provided, the backend wipes the
+   * existing `variant_attribute_values` rows and inserts the new
+   * ones in a single transaction.
+   */
+  attributes?: Record<string, string>;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
