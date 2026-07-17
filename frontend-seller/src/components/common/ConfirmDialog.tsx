@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/cn';
+import { useEffect } from "react";
+import { AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -50,8 +50,8 @@ export function ConfirmDialog({
   description,
   onConfirm,
   onCancel,
-  confirmText = 'Delete',
-  cancelText = 'Cancel',
+  confirmText = "Delete",
+  cancelText = "Cancel",
   isDestructive = false,
   isConfirming = false,
 }: ConfirmDialogProps) {
@@ -59,10 +59,10 @@ export function ConfirmDialog({
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === "Escape") onCancel();
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
@@ -73,7 +73,7 @@ export function ConfirmDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
-      aria-describedby={description ? 'confirm-dialog-description' : undefined}
+      aria-describedby={description ? "confirm-dialog-description" : undefined}
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -108,7 +108,7 @@ export function ConfirmDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
           <button
             type="button"
             onClick={onCancel}
@@ -122,14 +122,14 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={isConfirming}
             className={cn(
-              'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors shadow-sm',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
+              "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors shadow-sm",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
               isDestructive
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-[#002b5b] hover:bg-[#001f3f]',
+                ? "bg-red-600 hover:bg-red-700 cursor-pointer"
+                : "bg-[#002b5b] hover:bg-[#001f3f]",
             )}
           >
-            {isConfirming ? 'Working…' : confirmText}
+            {isConfirming ? "Working…" : confirmText}
           </button>
         </div>
       </div>

@@ -652,12 +652,10 @@ function BasicInfoSection({ product }: { product: Product }) {
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm cursor-pointer"
         >
           {updateMutation.isPending ? (
-            <>
-              <Loader2 size={16} className="animate-spin" aria-hidden /> Saving…
-            </>
-          ) : (
-            "Save changes"
-          )}
+              <>
+                <Loader2 size={16} className="animate-spin" aria-hidden /> Saving…
+              </>
+            ) : 'Save changes'}
         </button>
       </div>
     </form>

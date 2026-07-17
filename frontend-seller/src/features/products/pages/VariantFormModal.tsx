@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useEffect, useRef, useState } from 'react';
+import { useFieldArray, useForm } from 'react-hook-form';
+import { useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ImageIcon, ImagePlus, Plus, Trash2, X } from 'lucide-react';
@@ -110,42 +111,51 @@ export function VariantFormModal({
   // without losing the ability to reset between edits).
   const sessionKey = `${open ? 'open' : 'closed'}-${variant?.id ?? 'new'}`;
 
-  const initialValues = useMemo(() => {
-    if (!open) return null;
-    const attrs = (variant?.attributes ?? [])
-      .map((a) => ({ name: a.attributeName, value: a.value }));
+  // Build the full default values including the real attributes array.
+  // IMPORTANT: `defaultValues.attributes` must match what `fields` will
+  // render, or RHF's native `isDirty` will be `true` on mount because
+  // `defaultValues` (e.g. `[]`) differs from the initial field values.
+  const defaultValues: VariantFormValues = (() => {
+    if (variant) {
+      const attrs = (variant.attributes ?? []).map((a) => ({
+        name: a.attributeName,
+        value: a.value,
+      }));
+      return {
+        sku: variant.sku,
+        price: variant.price,
+        isActive: variant.isActive,
+        attributes: attrs.length > 0 ? attrs : [emptyAttribute()],
+      };
+    }
     return {
-      defaultValues: variant
-        ? {
-            sku: variant.sku,
-            price: variant.price,
-            isActive: variant.isActive,
-            attributes: [],
-          }
-        : emptyDefaults(defaultPrice),
-      initialAttributes:
-        attrs.length > 0 ? attrs : [emptyAttribute()],
+      sku: '',
+      price: defaultPrice ?? 0,
+      isActive: true,
+      attributes: [emptyAttribute()],
     };
-  }, [open, variant, defaultPrice]);
+  })();
 
   const {
     register,
     handleSubmit,
     control,
     reset,
-    formState: { errors },
-    setValue,
+    formState: { errors, isDirty },
+    getValues,
   } = useForm<VariantFormValues>({
     resolver: zodResolver(variantFormSchema),
-    defaultValues: initialValues?.defaultValues ?? emptyDefaults(defaultPrice),
+    defaultValues,
   });
 
-  // Local state mirrors the dynamic attributes array — easier than
-  // wrestle-controlled `useFieldArray` for a small list. Lazy
-  // initializer is allowed; the lint forbids useEffect→setState.
-  const [attributes, setAttributes] = useState(
-    initialValues?.initialAttributes ?? [emptyAttribute()],
-  );
+  // useFieldArray gives RHF full awareness of the attributes array, so
+  // `isDirty` tracks attribute changes automatically — no manual comparison.
+  const {
+    fields: attributeFields,
+    append,
+    remove,
+  } = useFieldArray({ control, name: 'attributes' });
+
   const [currentSession, setCurrentSession] = useState(sessionKey);
 
   // Staged image state — held locally until the seller commits via
@@ -173,26 +183,21 @@ export function VariantFormModal({
 
   // When the modal opens (or the target variant changes), realign state
   // by re-keying — causing the controlled effects below to run cleanly.
-  if (currentSession !== sessionKey && initialValues) {
+  if (currentSession !== sessionKey) {
     setCurrentSession(sessionKey);
-    setAttributes(initialValues.initialAttributes);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setImageFile(null);
     setPreviewUrl(null);
     setImageError(null);
-    reset(initialValues.defaultValues);
+    reset(defaultValues);
   }
 
-  const handleAddAttribute = () => setAttributes((prev) => [...prev, emptyAttribute()]);
-  const handleRemoveAttribute = (idx: number) =>
-    setAttributes((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
-  const updateAttribute = (idx: number, patch: Partial<{ name: string; value: string }>) =>
-    setAttributes((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  const handleAddAttribute = () => append(emptyAttribute());
 
-  // Keep RHF's array field synced so Zod validates it on submit.
-  useEffect(() => {
-    setValue('attributes', attributes, { shouldDirty: true });
-  }, [attributes, setValue]);
+  const handleRemoveAttribute = (idx: number) => {
+    if (attributeFields.length <= 1) return;
+    remove(idx);
+  };
 
   // Close on Escape — ref to a stable wrapper so we can detach cleanly.
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -207,7 +212,7 @@ export function VariantFormModal({
 
   const handleFormSubmit = (values: VariantFormValues) => {
     const attrs: Record<string, string> = {};
-    for (const p of attributes) {
+    for (const p of values.attributes) {
       const key = p.name.toLowerCase().trim();
       if (!key) continue;
       attrs[key] = p.value.trim();
@@ -258,12 +263,23 @@ export function VariantFormModal({
     setImageError(null);
   };
 
-  const computedDisplayName = useMemo(
-    () => attributes.map((a) => a.value).filter(Boolean).join(' • ') || '—',
-    [attributes],
-  );
-
+  // Live price from RHF for the header preview.
   const currentPrice = useWatch({ control, name: 'price' });
+
+  // Derived display name from RHF's field values (not local state).
+  const computedDisplayName = useWatch({
+    control,
+    name: 'attributes',
+  });
+  const displayName = computedDisplayName
+    ?.map((a) => a.value)
+    .filter(Boolean)
+    .join(' • ') || '—';
+
+  // Unified dirty flag: RHF's `isDirty` covers all registered form fields
+  // (sku, price, isActive, attributes via useFieldArray). The only
+  // untracked piece is the locally-staged image file — check it separately.
+  const isFormModified = isDirty || imageFile !== null;
 
   if (!open) return null;
 
@@ -287,7 +303,7 @@ export function VariantFormModal({
               {isEditing ? 'Edit variant' : 'Add variant'}
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Preview: <span className="font-medium text-slate-700">{computedDisplayName}</span>
+              Preview: <span className="font-medium text-slate-700">{displayName}</span>
               {' • '}
               {Number.isFinite(currentPrice) && currentPrice > 0
                 ? formatVnd(currentPrice)
@@ -443,7 +459,7 @@ export function VariantFormModal({
             </div>
           </div>
 
-          {/* Attributes */}
+          {/* Attributes — fully managed by useFieldArray */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-slate-700">
@@ -459,28 +475,26 @@ export function VariantFormModal({
             </div>
 
             <div className="space-y-2">
-              {attributes.map((attr, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-start">
+              {attributeFields.map((field, idx) => (
+                <div key={field.id} className="grid grid-cols-12 gap-2 items-start">
                   <input
                     type="text"
                     placeholder="Name (e.g. color)"
-                    value={attr.name}
-                    onChange={(e) => updateAttribute(idx, { name: e.target.value })}
-                    className={cn(inputClass(false), 'col-span-5')}
+                    {...register(`attributes.${idx}.name` as const)}
+                    className={cn(inputClass(Boolean(errors.attributes?.[idx]?.name?.message)), 'col-span-5')}
                     aria-label="Attribute name"
                   />
                   <input
                     type="text"
                     placeholder="Value (e.g. Red)"
-                    value={attr.value}
-                    onChange={(e) => updateAttribute(idx, { value: e.target.value })}
-                    className={cn(inputClass(false), 'col-span-6')}
+                    {...register(`attributes.${idx}.value` as const)}
+                    className={cn(inputClass(Boolean(errors.attributes?.[idx]?.value?.message)), 'col-span-6')}
                     aria-label="Attribute value"
                   />
                   <button
                     type="button"
                     onClick={() => handleRemoveAttribute(idx)}
-                    disabled={attributes.length <= 1}
+                    disabled={attributeFields.length <= 1}
                     className="col-span-1 p-2.5 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label="Remove attribute"
                   >
@@ -508,7 +522,7 @@ export function VariantFormModal({
           <button
             type="submit"
             form="variant-form"
-            disabled={isSubmitting}
+            disabled={!isFormModified || isSubmitting}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm cursor-pointer"
           >
             {isSubmitting
@@ -525,15 +539,6 @@ export function VariantFormModal({
 
 function emptyAttribute() {
   return { name: '', value: '' };
-}
-
-function emptyDefaults(defaultPrice?: number): VariantFormValues {
-  return {
-    sku: '',
-    price: defaultPrice ?? 0,
-    isActive: true,
-    attributes: [],
-  };
 }
 
 function inputClass(hasError: boolean): string {

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   GripVertical,
   ImagePlus,
+  Loader2,
   Star,
   Trash2,
   X,
@@ -353,16 +354,20 @@ export function ProductCreatePage() {
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
           <Link
             to="/products"
-            className="px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={isSubmitting || createMutation.isPending}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#001f3f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            {createMutation.isPending ? 'Creating…' : 'Create product'}
+            {(isSubmitting || createMutation.isPending) ? (
+              <>
+                <Loader2 size={14} className="animate-spin" aria-hidden /> Creating…
+              </>
+            ) : 'Create product'}
           </button>
         </div>
       </form>

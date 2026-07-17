@@ -97,21 +97,27 @@ export class ProductRepository {
       imageUrl: string | null;
       isActive: boolean;
       createdAt: Date;
+      /** Joined inventory fields — null when a variant has no inventory row yet. */
+      quantity: number | null;
+      reserved: number | null;
     }
 
     const rows = await this.prisma.$queryRaw<RawVariant[]>`
-      SELECT DISTINCT ON (product_id)
-        product_id AS "productId",
-        id          AS "variantId",
-        sku,
-        price,
-        image_url  AS "imageUrl",
-        is_active  AS "isActive",
-        created_at AS "createdAt"
-      FROM product_variants
-      WHERE product_id = ANY(${productIds}::uuid[])
-        AND is_active = true
-      ORDER BY product_id, price ASC, created_at ASC
+      SELECT DISTINCT ON (pv.product_id)
+        pv.product_id      AS "productId",
+        pv.id              AS "variantId",
+        pv.sku,
+        pv.price,
+        pv.image_url      AS "imageUrl",
+        pv.is_active       AS "isActive",
+        pv.created_at      AS "createdAt",
+        inv.quantity,
+        inv.reserved
+      FROM product_variants pv
+      LEFT JOIN inventory inv ON inv.variant_id = pv.id
+      WHERE pv.product_id = ANY(${productIds}::uuid[])
+        AND pv.is_active = true
+      ORDER BY pv.product_id, pv.price ASC, pv.created_at ASC
     `;
 
     for (const row of rows) {
@@ -124,6 +130,13 @@ export class ProductRepository {
         isActive: row.isActive,
         createdAt: row.createdAt,
         updatedAt: row.createdAt,
+        // Compute `available` so the entity's `stockStatus` getter returns
+        // 'out_of_stock' / 'low_stock' instead of always falling back to
+        // 'in_stock' when inventory data is absent from this listing query.
+        available:
+          row.quantity != null
+            ? Math.max(0, row.quantity - (row.reserved ?? 0))
+            : undefined,
       };
       result.set(
         row.productId,
@@ -313,15 +326,49 @@ export class ProductRepository {
     productId: string,
     urls: string[],
   ): Promise<string[] | null> {
-    const rows = await this.prisma.$queryRaw<{ images: string[] }[]>`
-      UPDATE products
-      SET images = ${urls}::text[],
-          updated_at = NOW()
-      WHERE id = ${productId}::uuid
-        AND deleted_at IS NULL
-      RETURNING images
-    `;
-    return rows[0]?.images ?? null;
+    return this.prisma.$transaction(async (tx) => {
+      // Direction A — Gallery → Variant:
+      // Before writing the new gallery, diff against the old one so we can
+      // null out any variant.imageUrl that used a URL the seller just
+      // removed from the gallery. This keeps the two in sync without a
+      // separate sync endpoint.
+      const oldProduct = await tx.product.findUnique({
+        where: { id: productId },
+        select: { images: true },
+      });
+      const oldImages: string[] = Array.isArray(oldProduct?.images)
+        ? (oldProduct.images as string[])
+        : [];
+
+      const newSet = new Set(urls);
+      const removedUrls = oldImages.filter((u) => !newSet.has(u));
+
+      if (removedUrls.length > 0) {
+        // Null out any variant whose imageUrl is among the removed URLs.
+        // An empty array matches nothing — safe even when no URLs are removed.
+        await tx.productVariant.updateMany({
+          where: {
+            productId,
+            imageUrl: { in: removedUrls },
+          },
+          data: { imageUrl: null },
+        });
+      }
+
+      // Write the new gallery.
+      await tx.product.update({
+        where: { id: productId },
+        data: { images: urls },
+      });
+
+      const updated = await tx.product.findUnique({
+        where: { id: productId },
+        select: { images: true },
+      });
+      return Array.isArray(updated?.images)
+        ? (updated.images as string[])
+        : [];
+    });
   }
 
   async delete(id: string): Promise<boolean> {
@@ -365,6 +412,24 @@ export class ProductRepository {
           reserved: 0,
         },
       });
+
+      // Sync the variant's image into the parent product's gallery so it
+      // appears in the Basic Info gallery tab without any frontend changes.
+      if (dto.imageUrl) {
+        const parent = await tx.product.findUnique({
+          where: { id: productId },
+          select: { images: true },
+        });
+        const images: string[] = Array.isArray(parent?.images)
+          ? (parent.images as string[])
+          : [];
+        if (!images.includes(dto.imageUrl)) {
+          await tx.product.update({
+            where: { id: productId },
+            data: { images: [...images, dto.imageUrl] },
+          });
+        }
+      }
 
       const attributes: VariantAttribute[] = [];
       // Guard against undefined attributes (schema uses .optional()).
@@ -420,10 +485,68 @@ export class ProductRepository {
       Object.keys(dto.attributes as object).length > 0;
 
     return this.prisma.$transaction(async (tx) => {
+      // Read the old imageUrl BEFORE writing — needed for Direction B.
+      const oldVariant = await tx.productVariant.findUnique({
+        where: { id: variantId },
+        select: { imageUrl: true, productId: true },
+      });
+      if (!oldVariant) return null;
+
       const row = await tx.productVariant.update({
         where: { id: variantId },
         data: updateData,
       });
+
+      const newImageUrl = dto.imageUrl;
+      const oldImageUrl = oldVariant.imageUrl;
+
+      // Direction B — Variant → Gallery:
+      // Single-pass compute: read current gallery, determine removals and
+      // additions, then persist with ONE update to avoid stale-snapshot bugs
+      // (two separate updates would each read the pre-mutation state).
+      const isNewImage = dto.imageUrl !== undefined;
+      if (isNewImage || oldImageUrl) {
+        const parent = await tx.product.findUnique({
+          where: { id: row.productId },
+          select: { images: true },
+        });
+        const currentImages: string[] = Array.isArray(parent?.images)
+          ? (parent.images as string[])
+          : [];
+
+        let finalImages = [...currentImages];
+        let changed = false;
+
+        // Remove old image if this variant is switching away from it.
+        if (oldImageUrl && isNewImage) {
+          // Only remove if no OTHER variant on this product still uses it.
+          const inUseCount = await tx.productVariant.count({
+            where: {
+              productId: row.productId,
+              imageUrl: oldImageUrl,
+              id: { not: variantId },
+            },
+          });
+          if (inUseCount === 0 && finalImages.includes(oldImageUrl)) {
+            finalImages = finalImages.filter((u) => u !== oldImageUrl);
+            changed = true;
+          }
+        }
+
+        // Append new image if not already present.
+        if (dto.imageUrl && !finalImages.includes(dto.imageUrl)) {
+          finalImages.push(dto.imageUrl);
+          changed = true;
+        }
+
+        // Persist exactly one update when the gallery actually changed.
+        if (changed) {
+          await tx.product.update({
+            where: { id: row.productId },
+            data: { images: finalImages },
+          });
+        }
+      }
 
       if (hasAttributes) {
         // Wipe existing rows first so the composite PK
@@ -553,8 +676,21 @@ export class ProductRepository {
         attributeName: av.attribute.name,
         value: av.value,
       }));
+
+      // `available` is `quantity - reserved`, floored at 0. We must
+      // compute it here (not in the entity) because the entity receives a
+      // plain row with no knowledge of the joined inventory.
+      const inventory = row.inventory;
+      const available =
+        inventory != null
+          ? Math.max(0, inventory.quantity - inventory.reserved)
+          : undefined;
+
       return ProductVariantEntity.fromDatabase(
-        row as unknown as import("./product-variant.entity").ProductVariantRowWithStock,
+        {
+          ...row,
+          available,
+        } as import("./product-variant.entity").ProductVariantRowWithStock,
         attributes,
       );
     });
