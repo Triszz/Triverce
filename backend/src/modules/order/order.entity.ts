@@ -10,6 +10,25 @@ export type OrderStatus =
   | "cancelled"
   | "failed";
 
+/**
+ * Re-export the `PaymentStatus` literal union so consumers (frontend
+ * types, status-log helpers) can import from a single module without
+ * depending on the payment module's internal entity.
+ */
+export type PaymentMethod = "momo" | "stripe" | "vnpay" | "cod";
+export type PaymentState = "pending" | "processing" | "paid" | "failed" | "cancelled" | "refunded";
+
+/**
+ * Subset of the `payment` row we expose on the order wire. Kept tight
+ * so the repository can build it from a tiny `select` instead of
+ * pulling the whole row (gateway data, idempotency key, etc. don't
+ * belong on the order payload).
+ */
+export interface OrderPaymentPayload {
+  method: PaymentMethod;
+  status: PaymentState;
+}
+
 export const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ["confirmed", "cancelled", "failed"],
   confirmed: ["shipping", "cancelled"],
@@ -32,6 +51,13 @@ export class OrderEntity {
     public readonly note: string | null,
     public readonly cancelledReason: string | null,
     public readonly paymentId: string | null,
+    /**
+     * Payment method + status. Defaults to `null` for orders without
+     * a linked payment row (rare — almost every checkout writes a
+     * payment, even for COD). Populated by the repository; the
+     * service layer never sets it directly.
+     */
+    public readonly payment: OrderPaymentPayload | null,
     public readonly items: OrderItemEntity[],
     public readonly statusLogs: OrderStatusLogEntity[],
     public readonly createdAt: Date,
@@ -58,6 +84,7 @@ export class OrderEntity {
     row: Order,
     items: OrderItemEntity[] = [],
     statusLogs: OrderStatusLogEntity[] = [],
+    payment: OrderPaymentPayload | null = null,
   ): OrderEntity {
     return new OrderEntity(
       row.id,
@@ -71,6 +98,7 @@ export class OrderEntity {
       row.note,
       row.cancelledReason,
       row.paymentId ?? null,
+      payment,
       items,
       statusLogs,
       row.createdAt,
@@ -90,6 +118,11 @@ export class OrderEntity {
       note: this.note,
       cancelledReason: this.cancelledReason,
       paymentId: this.paymentId,
+      // Issue #3 fix: payment method + status are now exposed so the
+      // seller dashboard can render "VNPay - Paid" / "COD - Pending"
+      // instead of the old meaningless "Linked" indicator.
+      paymentMethod: this.payment?.method ?? null,
+      paymentStatus: this.payment?.status ?? null,
       items: this.items.map((i) => i.toPublic()),
       statusLogs: this.statusLogs.map((l) => l.toPublic()),
       createdAt: this.createdAt,

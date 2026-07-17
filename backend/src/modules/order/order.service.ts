@@ -239,6 +239,37 @@ export class OrderService {
         },
         trx,
       );
+
+      // COD auto-settle: cash has been collected at the door, so the
+      // linked Payment row must flip to `paid` atomically with the
+      // status transition. The repository method guards on
+      // `gateway = 'cod' AND status != 'paid'` and is a no-op for
+      // anything else (vnpay/momo/stripe flows are settled by their
+      // own gateway callbacks, never by the seller marking the order
+      // as delivered). Same transaction guarantees the dashboard
+      // refetch sees either both changes or neither.
+      if (dto.status === "delivered" && order.paymentId) {
+        const synced = await this.orderRepository.markCodPaymentAsPaid(
+          order.paymentId,
+          trx,
+        );
+        if (synced > 0) {
+          // Note in the order's status log so the audit trail records
+          // that the delivery also settled the payment. Skipped when
+          // the payment was already paid / not COD — no log noise in
+          // the common "mark already-paid delivered" flow.
+          await this.orderRepository.createStatusLog(
+            {
+              orderId,
+              fromStatus: dto.status,
+              toStatus: dto.status,
+              changedBy: null,
+              note: "COD payment marked as paid on delivery",
+            },
+            trx,
+          );
+        }
+      }
     });
 
     return (await this.orderRepository.findById(orderId))!;

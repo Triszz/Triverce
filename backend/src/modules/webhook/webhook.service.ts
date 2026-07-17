@@ -91,23 +91,23 @@ export class WebhookService {
           newStatus = "pending";
       }
 
-      await this.orderRepository.updateStatus(
-        orderId,
-        newStatus,
-        undefined,
-        trx,
-      );
-
-      await this.orderRepository.createStatusLog(
+      // Idempotency guard (see OrderRepository.confirmOrderAfterPayment
+      // and the matching comment in PaymentService.updateRelatedOrders):
+      // if this webhook races with the browser-return URL, only one
+      // caller's UPDATE matches the row's current status. The loser's
+      // `applied` is false, and we skip the log insert so we don't get
+      // two "Pending -> Confirmed" rows at the same timestamp.
+      const applied = await this.orderRepository.confirmOrderAfterPayment(
         {
           orderId,
-          fromStatus: "pending",
-          toStatus: newStatus,
-          changedBy: null,
+          expectedFromStatus: "pending",
+          newStatus,
           note: `Auto updated via payment webhook (${paymentStatus})`,
+          changedBy: null,
         },
         trx,
       );
+      if (!applied) continue;
     }
   }
 }

@@ -246,23 +246,26 @@ export class PaymentService {
           newStatus = "pending";
       }
 
-      await this.orderRepository.updateStatus(
-        orderId,
-        newStatus,
-        undefined,
-        client,
-      );
-
-      await this.orderRepository.createStatusLog(
+      // Idempotency guard: VNPay can call BOTH the IPN webhook and the
+      // browser return URL for the same transaction. The payment-row
+      // `status !== "pending"` check above dedupes the *payment*
+      // update, but if both slipped through (or if `verifyStatus` races
+      // with the webhook) we MUST NOT create a second
+      // "Pending -> Confirmed" log row. The repository method
+      // re-checks the order's current status inside the transaction and
+      // returns false when the row has already moved; we skip the log
+      // insert in that case.
+      const applied = await this.orderRepository.confirmOrderAfterPayment(
         {
           orderId,
-          fromStatus: "pending",
-          toStatus: newStatus,
-          changedBy: null,
+          expectedFromStatus: "pending",
+          newStatus,
           note: `Payment ${paymentStatus}`,
+          changedBy: null,
         },
-        client,
+        client as Prisma.TransactionClient,
       );
+      if (!applied) continue;
     }
   }
 }
