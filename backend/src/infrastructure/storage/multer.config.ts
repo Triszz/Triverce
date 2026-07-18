@@ -2,7 +2,7 @@ import multer, { FileFilterCallback } from "multer";
 import { Request } from "express";
 import { BadRequestError } from "../../core/errors/AppError";
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
 const MAX_SIZE_MB = 5;
 
 export const multerUpload = multer({

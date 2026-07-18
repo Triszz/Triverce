@@ -95,6 +95,40 @@ export class UploadController {
     }
   };
 
+  /**
+   * POST /api/upload/logos/:sellerId
+   *
+   * Uploads and stores a seller's store logo. The URL is returned
+   * directly — the caller (SellerService) writes it into the
+   * `users.logo_url` field. Does NOT auto-update the user row (I/O
+   * purity contract — same reason as the product image endpoint).
+   *
+   * The `:sellerId` param is validated against `req.user.userId` by
+   * the `requireRole` guard in the route; the upload service doesn't
+   * have access to the auth context.
+   */
+  uploadLogo = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.file) throw new BadRequestError("No file uploaded");
+
+      const result = await this.uploadService.uploadLogo(
+        req.file,
+        req.params.sellerId as string,
+      );
+
+      res.status(201).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // Delete file
   deleteFile = async (req: Request, res: Response, next: NextFunction) => {
     try {

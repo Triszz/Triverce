@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -14,6 +14,8 @@ import { createCartRouter } from "./modules/cart/cart.route";
 import { createOrderRouter } from "./modules/order/order.route";
 import { createPaymentRouter } from "./modules/payment/payment.route";
 import { createWebhookRouter } from "./modules/webhook/webhook.route";
+import { createDashboardRouter } from "./modules/dashboard/dashboard.route";
+import { createSellerRouter } from "./modules/seller/seller.route";
 
 const app: Application = express();
 
@@ -25,9 +27,10 @@ app.use(
   }),
 );
 
-const webhookController = container.resolve("webhookController");
-app.use("/api/webhooks", createWebhookRouter(webhookController));
-
+// jsonParser only consumes requests whose Content-Type is application/json.
+// This is the standard pattern: express.json() itself already guards on
+// Content-Type, so multipart/form-data upload requests pass through untouched
+// and multer (running later in the route handler chain) can read the stream.
 app.use(express.json());
 
 /**
@@ -55,6 +58,9 @@ app.use(
 );
 app.use(cookieParser());
 
+const webhookController = container.resolve("webhookController");
+app.use("/api/webhooks", createWebhookRouter(webhookController));
+
 // Resolve controllers
 const authController = container.resolve("authController");
 const categoryController = container.resolve("categoryController");
@@ -64,6 +70,8 @@ const inventoryController = container.resolve("inventoryController");
 const cartController = container.resolve("cartController");
 const orderController = container.resolve("orderController");
 const paymentController = container.resolve("paymentController");
+const dashboardController = container.resolve("dashboardController");
+const sellerController = container.resolve("sellerController");
 
 // Initialize uploads/ directory when server starts
 const uploadService = container.resolve("uploadService");
@@ -78,8 +86,10 @@ app.use("/api/inventory", createInventoryRouter(inventoryController));
 app.use("/api/cart", createCartRouter(cartController));
 app.use("/api/orders", createOrderRouter(orderController));
 app.use("/api/payments", createPaymentRouter(paymentController));
+app.use("/api/seller/dashboard", createDashboardRouter(dashboardController));
+app.use("/api/seller", createSellerRouter(sellerController));
 
-app.get("/health", (req, res) => {
+app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({ status: "OK", message: "App is running!" });
 });
 

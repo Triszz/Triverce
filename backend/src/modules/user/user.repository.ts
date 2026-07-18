@@ -67,6 +67,37 @@ export class UserRepository {
     return UserEntity.fromDatabase(row);
   }
 
+  /**
+   * Update seller storefront profile fields. Exposed as a separate
+   * method so the service layer can be explicit about intent — this
+   * endpoint is specifically for the store settings page and should
+   * not be used for arbitrary field mutations.
+   */
+  async updateStoreProfile(
+    id: string,
+    data: {
+      storeName?: string | null;
+      description?: string | null;
+      logoUrl?: string | null;
+      supportEmail?: string | null;
+      phone?: string | null;
+      address?: string | null;
+    },
+  ): Promise<UserEntity | null> {
+    const row = await this.prisma.user.update({
+      where: { id },
+      data: {
+        storeName: data.storeName ?? null,
+        description: data.description ?? null,
+        logoUrl: data.logoUrl ?? null,
+        supportEmail: data.supportEmail ?? null,
+        phone: data.phone ?? null,
+        address: data.address ?? null,
+      },
+    });
+    return UserEntity.fromDatabase(row);
+  }
+
   async setActiveStatus(
     id: string,
     isActive: boolean,

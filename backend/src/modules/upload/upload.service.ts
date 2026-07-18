@@ -21,6 +21,7 @@ export class LocalUploadService implements IUploadService {
   async init(): Promise<void> {
     await fs.mkdir(path.join(this.baseDir, "products"), { recursive: true });
     await fs.mkdir(path.join(this.baseDir, "variants"), { recursive: true });
+    await fs.mkdir(path.join(this.baseDir, "logos"), { recursive: true });
   }
 
   /**
@@ -74,6 +75,53 @@ export class LocalUploadService implements IUploadService {
       height: 600,
       quality: 85,
     });
+  }
+
+  // Upload store logo.
+  //
+  // SVG files are skipped from sharp processing — vector graphics must not be
+  // rasterised or converted to WebP; they are saved as-is with a .svg extension.
+  // Raster files (JPEG / PNG / WebP) are processed normally and converted to
+  // WebP for consistent output.
+  async uploadLogo(
+    file: Express.Multer.File,
+    sellerId: string,
+  ): Promise<UploadResult> {
+    if (!file.buffer) {
+      throw new BadRequestError("No file buffer found");
+    }
+
+    const isSvg = file.mimetype === "image/svg+xml";
+    const timestamp = Date.now();
+    const filename = `${sellerId}-${timestamp}${isSvg ? ".svg" : ".webp"}`;
+    const savePath = path.join(this.baseDir, "logos", filename);
+
+    if (isSvg) {
+      // Write SVG directly — no sharp processing needed.
+      await fs.writeFile(savePath, file.buffer);
+      return {
+        url: `${this.publicPath}/logos/${filename}`,
+        fileName: `logos/${filename}`,
+        originalName: file.originalname,
+        size: file.buffer.length,
+        mimeType: "image/svg+xml",
+      };
+    }
+
+    // Raster images: resize + convert to WebP.
+    const outputBuffer = await sharp(file.buffer)
+      .resize(256, 256, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    await fs.writeFile(savePath, outputBuffer);
+    return {
+      url: `${this.publicPath}/logos/${filename}`,
+      fileName: `logos/${filename}`,
+      originalName: file.originalname,
+      size: outputBuffer.length,
+      mimeType: "image/webp",
+    };
   }
 
   // Delete file

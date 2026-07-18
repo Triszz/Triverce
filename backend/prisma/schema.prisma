@@ -76,6 +76,17 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  // ── Seller storefront profile ──────────────────────────────────
+  // Only meaningful when role = 'seller'. Stored here (not in a
+  // separate Seller model) because a seller's identity IS their User
+  // account; there's a 1-to-1 relationship.
+  storeName     String?  @map("store_name")    @db.VarChar(100)
+  description   String?  @map("description")  @db.Text
+  logoUrl       String?  @map("logo_url")     @db.VarChar(500)
+  supportEmail  String?  @map("support_email") @db.VarChar(255)
+  phone         String?  @map("phone")         @db.VarChar(20)
+  address       String?  @map("address")      @db.VarChar(500)
+
   // Self-referential seller → products
   products         Product[]        @relation("SellerProducts")
   carts            Cart[]

@@ -27,6 +27,15 @@ export const createUploadRouter = (controller: UploadController) => {
     controller.uploadVariantImage,
   );
 
+  // Upload store logo
+  router.post(
+    "/logos/:sellerId",
+    authenticate,
+    requireRole("seller", "admin"),
+    multerUpload.single("logo"),
+    controller.uploadLogo,
+  );
+
   // Delete file
   router.delete(
     "/:folder/:filename",

@@ -14,9 +14,10 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/svg+xml',
 ] as const;
 
-export const ALLOWED_IMAGE_FORMATS_LABEL = 'JPEG, PNG, WebP';
+export const ALLOWED_IMAGE_FORMATS_LABEL = 'JPEG, PNG, WebP, SVG';
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_IMAGE_SIZE_LABEL = '5MB';
 export const IMAGE_VALIDATION_HELPER_TEXT = `Accepted formats: ${ALLOWED_IMAGE_FORMATS_LABEL}. Max size: ${MAX_IMAGE_SIZE_LABEL}.`;

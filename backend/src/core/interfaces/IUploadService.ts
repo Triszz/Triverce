@@ -35,5 +35,11 @@ export interface IUploadService {
     variantId: string,
   ): Promise<UploadResult>;
 
+  /** Upload a seller's store logo (used by /api/upload/logos/:sellerId). */
+  uploadLogo(
+    file: Express.Multer.File,
+    sellerId: string,
+  ): Promise<UploadResult>;
+
   deleteFile(fileName: string): Promise<boolean>;
 }

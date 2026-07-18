@@ -11,6 +11,14 @@ export class UserEntity {
     public readonly isActive: boolean,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
+    // Seller storefront fields — nullable on the entity for all roles,
+    // populated only for role = 'seller'.
+    public readonly storeName?: string | null,
+    public readonly description?: string | null,
+    public readonly logoUrl?: string | null,
+    public readonly supportEmail?: string | null,
+    public readonly phone?: string | null,
+    public readonly address?: string | null,
   ) {}
 
   // Business rules
@@ -38,6 +46,12 @@ export class UserEntity {
       row.isActive,
       row.createdAt,
       row.updatedAt,
+      row.storeName,
+      row.description,
+      row.logoUrl,
+      row.supportEmail,
+      row.phone,
+      row.address,
     );
   }
 
@@ -50,6 +64,21 @@ export class UserEntity {
       isActive: this.isActive,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+    };
+  }
+
+  /**
+   * Seller storefront profile shape — exposes only the fields
+   * that make sense on the public-facing store page.
+   */
+  toStoreProfile() {
+    return {
+      storeName: this.storeName ?? "",
+      description: this.description ?? "",
+      logoUrl: this.logoUrl ?? "",
+      supportEmail: this.supportEmail ?? "",
+      phone: this.phone ?? "",
+      address: this.address ?? "",
     };
   }
 }

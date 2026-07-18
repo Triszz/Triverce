@@ -29,6 +29,11 @@ import { PaymentController } from "../modules/payment/payment.controller";
 import type { IPaymentGateway } from "../modules/payment/payment.interface";
 import { WebhookService } from "../modules/webhook/webhook.service";
 import { WebhookController } from "../modules/webhook/webhook.controller";
+import { DashboardRepository } from "../modules/dashboard/dashboard.repository";
+import { DashboardService } from "../modules/dashboard/dashboard.service";
+import { DashboardController } from "../modules/dashboard/dashboard.controller";
+import { SellerService } from "../modules/seller/seller.service";
+import { SellerController } from "../modules/seller/seller.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
 import { VNPayAdapter } from "../modules/payment/adapters/vnpay.adapter";
 
@@ -93,6 +98,13 @@ export interface ICradle {
   // Webhook
   webhookService: WebhookService;
   webhookController: WebhookController;
+  // Dashboard
+  dashboardRepository: DashboardRepository;
+  dashboardService: DashboardService;
+  dashboardController: DashboardController;
+  // Seller profile
+  sellerService: SellerService;
+  sellerController: SellerController;
 }
 
 const container = createContainer<ICradle>({
@@ -138,6 +150,13 @@ container.register({
   // Webhook
   webhookService: asClass(WebhookService).scoped(),
   webhookController: asClass(WebhookController).scoped(),
+  // Dashboard
+  dashboardRepository: asClass(DashboardRepository).scoped(),
+  dashboardService: asClass(DashboardService).scoped(),
+  dashboardController: asClass(DashboardController).scoped(),
+  // Seller profile
+  sellerService: asClass(SellerService).scoped(),
+  sellerController: asClass(SellerController).scoped(),
 });
 
 export { container };
