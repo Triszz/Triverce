@@ -34,6 +34,9 @@ import { DashboardService } from "../modules/dashboard/dashboard.service";
 import { DashboardController } from "../modules/dashboard/dashboard.controller";
 import { SellerService } from "../modules/seller/seller.service";
 import { SellerController } from "../modules/seller/seller.controller";
+import { NotificationRepository } from "../modules/notification/notification.repository";
+import { NotificationService } from "../modules/notification/notification.service";
+import { NotificationController } from "../modules/notification/notification.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
 import { VNPayAdapter } from "../modules/payment/adapters/vnpay.adapter";
 
@@ -105,6 +108,10 @@ export interface ICradle {
   // Seller profile
   sellerService: SellerService;
   sellerController: SellerController;
+  // Notifications
+  notificationRepository: NotificationRepository;
+  notificationService: NotificationService;
+  notificationController: NotificationController;
 }
 
 const container = createContainer<ICradle>({
@@ -142,6 +149,10 @@ container.register({
   orderRepository: asClass(OrderRepository).scoped(),
   orderService: asClass(OrderService).scoped(),
   orderController: asClass(OrderController).scoped(),
+  // Aliased for `OrderService`'s `notifications` constructor parameter.
+  // Awilix CLASSIC mode resolves constructor params by name, so we
+  // expose the same `NotificationService` under both keys.
+  notifications: asClass(NotificationService).scoped(),
   // Payment
   paymentRepository: asClass(PaymentRepository).scoped(),
   paymentService: asClass(PaymentService).scoped(),
@@ -157,6 +168,10 @@ container.register({
   // Seller profile
   sellerService: asClass(SellerService).scoped(),
   sellerController: asClass(SellerController).scoped(),
+  // Notifications
+  notificationRepository: asClass(NotificationRepository).scoped(),
+  notificationService: asClass(NotificationService).scoped(),
+  notificationController: asClass(NotificationController).scoped(),
 });
 
 export { container };

@@ -16,6 +16,7 @@ import { createPaymentRouter } from "./modules/payment/payment.route";
 import { createWebhookRouter } from "./modules/webhook/webhook.route";
 import { createDashboardRouter } from "./modules/dashboard/dashboard.route";
 import { createSellerRouter } from "./modules/seller/seller.route";
+import { createNotificationRouter } from "./modules/notification/notification.route";
 
 const app: Application = express();
 
@@ -72,6 +73,7 @@ const orderController = container.resolve("orderController");
 const paymentController = container.resolve("paymentController");
 const dashboardController = container.resolve("dashboardController");
 const sellerController = container.resolve("sellerController");
+const notificationController = container.resolve("notificationController");
 
 // Initialize uploads/ directory when server starts
 const uploadService = container.resolve("uploadService");
@@ -88,6 +90,7 @@ app.use("/api/orders", createOrderRouter(orderController));
 app.use("/api/payments", createPaymentRouter(paymentController));
 app.use("/api/seller/dashboard", createDashboardRouter(dashboardController));
 app.use("/api/seller", createSellerRouter(sellerController));
+app.use("/api/notifications", createNotificationRouter(notificationController));
 
 app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({ status: "OK", message: "App is running!" });

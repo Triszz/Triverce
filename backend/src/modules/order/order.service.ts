@@ -14,6 +14,7 @@ import {
 import { CartRepository } from "../cart/cart.repository";
 import { PaymentRepository } from "../payment/payment.repository";
 import type { IPaymentGateway } from "../payment/payment.interface";
+import type { INotificationService } from "../../core/interfaces/INotificationService";
 
 /**
  * OrderService — Prisma-aware.
@@ -30,6 +31,7 @@ export class OrderService {
     private paymentRepository: PaymentRepository,
     private gateway: IPaymentGateway,
     private prisma: PrismaClient,
+    private notifications: INotificationService,
   ) {}
 
   async checkout(
@@ -93,6 +95,22 @@ export class OrderService {
             trx,
           );
           createdOrders.push(order);
+
+          // Publish a NEW_ORDER notification to the seller inside the
+          // same transaction — guarantees the notification can never
+          // be persisted without the order, or vice versa. The order
+          // id is the natural `actionUrl` (full UUID; the dashboard
+          // already routes by /orders/:id).
+          await this.notifications.create(
+            {
+              sellerId,
+              type: "NEW_ORDER",
+              title: "New Order Received",
+              message: `Order #${order.id.slice(0, 8)} has been placed.`,
+              actionUrl: `/orders/${order.id}`,
+            },
+            trx,
+          );
         }
       } else {
         singlePaymentId = await this.paymentRepository.create(
@@ -116,6 +134,17 @@ export class OrderService {
             trx,
           );
           createdOrders.push(order);
+
+          await this.notifications.create(
+            {
+              sellerId,
+              type: "NEW_ORDER",
+              title: "New Order Received",
+              message: `Order #${order.id.slice(0, 8)} has been placed.`,
+              actionUrl: `/orders/${order.id}`,
+            },
+            trx,
+          );
         }
       }
 
@@ -379,6 +408,29 @@ export class OrderService {
           toStatus: "cancelled",
           changedBy: user.userId,
           note: dto.reason,
+        },
+        trx,
+      );
+
+      // Publish an ORDER_CANCELLED notification inside the same
+      // transaction so the feed entry is atomic with the status flip.
+      // The `who cancelled` differs: a customer-initiated cancel goes
+      // to the seller; a seller-initiated cancel still fires the
+      // notification (the seller sees their own action in the feed,
+      // matching industry conventions for audit trails).
+      const cancellerLabel =
+        user.role === "seller"
+          ? "You"
+          : user.role === "admin"
+            ? "An admin"
+            : "The customer";
+      await this.notifications.create(
+        {
+          sellerId: order.sellerId,
+          type: "ORDER_CANCELLED",
+          title: "Order Cancelled",
+          message: `${cancellerLabel} cancelled order #${order.id.slice(0, 8)}.`,
+          actionUrl: `/orders/${order.id}`,
         },
         trx,
       );

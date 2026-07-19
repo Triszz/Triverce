@@ -94,6 +94,7 @@ model User {
   ordersAsSeller   Order[]          @relation("SellerOrders")
   payments         Payment[]
   orderStatusLogs  OrderStatusLog[]
+  notifications    Notification[]   @relation("SellerNotifications")
 
   @@index([email], map: "idx_users_email")
   @@map("users")
@@ -347,4 +348,41 @@ model WebhookEvent {
   processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
 
   @@map("webhook_events")
+}
+
+// ──────────────────────────────────────────────────────────────
+// Notifications
+//
+// Per-seller notification feed surfaced in the dashboard header
+// bell. Created by background business-logic hooks (order placed,
+// order cancelled, …). Read/unread state is tracked here so the
+// frontend can compute `unreadCount` cheaply and render the
+// familiar red-dot badge on the bell icon.
+//
+// Why store on a dedicated table (not on `users` or in JSON): the
+// list endpoint needs to page through history; a JSON column on
+// `users` would require the seller to refetch their entire user
+// row just to mark one entry as read.
+// ──────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  sellerId  String   @map("seller_id") @db.Uuid
+  /// Discriminator — e.g. 'NEW_ORDER', 'ORDER_CANCELLED'. Kept as a
+  /// free-form string (not a Postgres enum) so new kinds of
+  /// notifications can be added without a schema migration.
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(255)
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  /// Optional deep link the frontend should navigate to when the
+  /// seller clicks the notification (e.g. '/orders/abc-123').
+  actionUrl String?  @map("action_url") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  seller User @relation("SellerNotifications", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, isRead], map: "idx_notifications_seller_id_is_read")
+  @@index([sellerId, createdAt], map: "idx_notifications_seller_id_created_at")
+  @@map("notifications")
 }

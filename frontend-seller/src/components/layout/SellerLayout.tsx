@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
   ShoppingBag,
   Settings,
-  Bell,
   LogOut,
   Store,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { useAuthStore } from '@/stores/useAuthStore';
-import apiClient from '@/lib/apiClient';
-import { cn } from '@/lib/cn';
+} from "lucide-react";
+import { toast } from "sonner";
+import { useAuthStore } from "@/stores/useAuthStore";
+import apiClient from "@/lib/apiClient";
+import { cn } from "@/lib/cn";
+import { NotificationBell } from "@/features/notifications/components/NotificationBell";
 
 interface NavItem {
   to: string;
@@ -21,10 +21,10 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/products', label: 'Products', icon: Package },
-  { to: '/orders', label: 'Orders', icon: ShoppingBag },
-  { to: '/settings', label: 'Store Settings', icon: Settings },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/products", label: "Products", icon: Package },
+  { to: "/orders", label: "Orders", icon: ShoppingBag },
+  { to: "/settings", label: "Store Settings", icon: Settings },
 ];
 
 /**
@@ -46,24 +46,24 @@ export function SellerLayout() {
 
   const initials = user?.fullName
     ? user.fullName
-        .split(' ')
+        .split(" ")
         .map((p) => p.charAt(0).toUpperCase())
         .slice(0, 2)
-        .join('')
-    : '?';
+        .join("")
+    : "?";
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
       // The server-side logout endpoint may 401 if the token is already
       // invalid; we still want to clear local state regardless.
-      await apiClient.post('/auth/logout', {});
+      await apiClient.post("/auth/logout", {});
     } catch {
       /* proceed anyway */
     }
     clearAuth();
-    toast.success('Logged out');
-    navigate('/login');
+    toast.success("Logged out");
+    navigate("/login");
     setIsLoggingOut(false);
   };
 
@@ -72,10 +72,7 @@ export function SellerLayout() {
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
       <aside className="w-64 shrink-0 bg-[#031140] flex flex-col">
         {/* Brand */}
-        <Link
-          to="/"
-          className="h-16 flex items-center gap-2 px-6"
-        >
+        <Link to="/" className="h-16 flex items-center gap-2 px-6">
           <span className="w-9 h-9 rounded-lg bg-white/10 text-white flex items-center justify-center">
             <Store size={18} aria-hidden />
           </span>
@@ -93,13 +90,13 @@ export function SellerLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/'}
+                end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'text-slate-400 hover:bg-white/10 hover:text-white',
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "text-slate-400 hover:bg-white/10 hover:text-white",
                   )
                 }
               >
@@ -116,10 +113,10 @@ export function SellerLayout() {
             type="button"
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <LogOut size={18} aria-hidden />
-            {isLoggingOut ? 'Logging out...' : 'Logout'}
+            {isLoggingOut ? "Logging out..." : "Logout"}
           </button>
         </div>
       </aside>
@@ -130,27 +127,21 @@ export function SellerLayout() {
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
           <div>
             <h1 className="text-base font-semibold text-slate-900">
-              Welcome back{user?.fullName ? `, ${user.fullName.split(' ')[0]}` : ''}
+              Welcome back
+              {user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}
             </h1>
             <p className="text-xs text-slate-500">
-              {user?.role === 'admin' ? 'Administrator' : 'Seller'} dashboard
+              {user?.role === "admin" ? "Administrator" : "Seller"} dashboard
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-            >
-              <Bell size={18} aria-hidden />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <NotificationBell />
 
             <div className="flex items-center gap-3 pl-3 ml-1 border-l border-slate-200">
               <div className="text-right leading-tight hidden sm:block">
                 <p className="text-sm font-medium text-slate-900 truncate max-w-[180px]">
-                  {user?.fullName ?? 'Seller'}
+                  {user?.fullName ?? "Seller"}
                 </p>
                 <p className="text-xs text-slate-500 truncate max-w-[180px]">
                   {user?.email}
