@@ -88,6 +88,11 @@ const ShippingPage = lazy(() =>
 const ReturnsPage = lazy(() =>
   import('./pages/ReturnsPage').then((m) => ({ default: m.ReturnsPage })),
 );
+const StoreProfilePage = lazy(() =>
+  import('./pages/StoreProfilePage').then((m) => ({
+    default: m.StoreProfilePage,
+  })),
+);
 
 function App() {
   return (
@@ -137,6 +142,14 @@ function App() {
             element={
               <Suspense fallback={<PageSuspense variant="detail" />}>
                 <ProductDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/store/:sellerId"
+            element={
+              <Suspense fallback={<PageSuspense variant="detail" />}>
+                <StoreProfilePage />
               </Suspense>
             }
           />

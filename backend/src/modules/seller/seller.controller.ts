@@ -5,6 +5,24 @@ import { UnauthorizedError } from "../../core/errors/AppError";
 export class SellerController {
   constructor(private sellerService: SellerService) {}
 
+  /**
+   * GET /api/stores/:sellerId — public store profile.
+   * No authentication required.
+   */
+  getPublicStoreProfile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const sellerId = req.params.sellerId as string;
+      const data = await this.sellerService.getPublicStoreProfile(sellerId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getStoreProfile = async (
     req: Request,
     res: Response,

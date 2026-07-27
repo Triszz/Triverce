@@ -14,6 +14,8 @@ export class ProductEntity {
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
     public readonly variants: ReadonlyArray<import("./product-variant.entity").ProductVariantEntity> = [],
+    /** Populated at query time via Prisma `include: { seller: { select: { storeName: true } } }`. */
+    public readonly storeName: string | null = null,
   ) {
     if (basePrice < 0) {
       throw new Error("Product base price cannot be negative");
@@ -76,17 +78,24 @@ export class ProductEntity {
    */
   getEffectiveImages(): string[] {
     const stored = [...this.images];
-    // Authored mode: trust the seller's `images[]` exactly. No variant
-    // fallback. This is the fix for the "I deleted an image and it came
-    // back after refresh" bug.
-    if (stored.length > 0) return stored;
 
-    // Legacy mode: synthesize a gallery from variant imageUrls only.
+    // Always deduplicate, regardless of mode. Duplicates can creep in from:
+    //   • Legacy data where variant imageUrls were wrongly appended to `images[]`.
+    //   • Seed / migration scripts that naively merged two lists.
     const seen = new Set<string>();
     const out: string[] = [];
+    for (const url of stored) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      out.push(url);
+    }
+
+    // Authored mode: deduplicated `images[]` is the final answer.
+    if (out.length > 0) return out;
+
+    // Legacy mode: synthesize a gallery from variant imageUrls only.
     for (const variant of this.variants) {
-      if (!variant.imageUrl) continue;
-      if (seen.has(variant.imageUrl)) continue;
+      if (!variant.imageUrl || seen.has(variant.imageUrl)) continue;
       seen.add(variant.imageUrl);
       out.push(variant.imageUrl);
     }
@@ -96,6 +105,7 @@ export class ProductEntity {
   static fromDatabase(
     row: Product,
     variants: import("./product-variant.entity").ProductVariantEntity[] = [],
+    storeName: string | null = null,
   ): ProductEntity {
     return new ProductEntity(
       row.id,
@@ -116,6 +126,7 @@ export class ProductEntity {
       row.createdAt,
       row.updatedAt,
       variants,
+      storeName,
     );
   }
 
@@ -133,7 +144,10 @@ export class ProductEntity {
       // Main image now reads from `images[]` first, variant image as
       // fallback. The dashboard cells / storefront cards consume this.
       imageUrl: this.getMainImageUrl(),
-      images: [...this.images],
+      // Use `getEffectiveImages()` so summaries are always deduplicated
+      // even when the authored `images[]` contains duplicates.
+      images: this.getEffectiveImages(),
+      storeName: this.storeName,
     };
   }
 
@@ -160,6 +174,7 @@ export class ProductEntity {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       variants: this.variants.map((v) => v.toPublic()),
+      storeName: this.storeName,
     };
   }
 }

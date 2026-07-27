@@ -82,8 +82,12 @@ export function VariantPicker({
   /**
    * For an attribute row + candidate value: which variant would the user
    * land on if they picked that value, given everything else they've
-   * already chosen? Used both to disable dead-end combos and to compute
-   * the preview variant.
+   * already chosen?
+   *
+   * Returns the variant regardless of stock so out-of-stock chips remain
+   * clickable (e-commerce convention — users should still be able to view
+   * the variant's image). The caller is responsible for any "is in stock"
+   * styling cues.
    */
   const findVariantForAxis = (
     axisName: string,
@@ -106,17 +110,6 @@ export function VariantPicker({
       if (match) return v;
     }
     return null;
-  };
-
-  const isValueAvailable = (
-    axisName: string,
-    candidateValue: string,
-  ): boolean => {
-    // Available if picking it doesn't lead to out_of_stock AND the variant
-    // is active. If the user changes axes in any order, we always want
-    // at least one in-stock option for the remaining axes.
-    const v = findVariantForAxis(axisName, candidateValue);
-    return !!v && v.isActive && v.stockStatus !== 'out_of_stock';
   };
 
   const handlePillClick = (axisName: string, value: string) => {
@@ -151,7 +144,12 @@ export function VariantPicker({
             <div className="flex flex-wrap gap-2">
               {axis.values.map((value) => {
                 const isSelected = selectedValue === value;
-                const isAvailable = isValueAvailable(axis.name, value);
+                const variant = findVariantForAxis(axis.name, value);
+                // Out-of-stock chips stay clickable so buyers can view the
+                // variant's image, but get visual cues to signal unavailability.
+                const isOutOfStock =
+                  !!variant &&
+                  (variant.stockStatus === 'out_of_stock' || !variant.isActive);
 
                 if (isColorAxis) {
                   return (
@@ -159,7 +157,7 @@ export function VariantPicker({
                       key={value}
                       value={value}
                       selected={isSelected}
-                      disabled={!isAvailable}
+                      outOfStock={isOutOfStock}
                       onClick={() => handlePillClick(axis.name, value)}
                     />
                   );
@@ -169,7 +167,7 @@ export function VariantPicker({
                   <Pill
                     key={value}
                     selected={isSelected}
-                    disabled={!isAvailable}
+                    outOfStock={isOutOfStock}
                     onClick={() => handlePillClick(axis.name, value)}
                   >
                     {value}
@@ -190,12 +188,12 @@ export function VariantPicker({
 
 function Pill({
   selected,
-  disabled,
+  outOfStock,
   onClick,
   children,
 }: {
   selected: boolean;
-  disabled: boolean;
+  outOfStock: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -204,20 +202,25 @@ function Pill({
       type="button"
       role="radio"
       aria-checked={selected}
+      aria-label={outOfStock ? `${children} (out of stock)` : undefined}
       onClick={onClick}
-      disabled={disabled}
       className={cn(
-        'min-w-[3rem] rounded-lg border px-4 py-2 text-sm font-medium',
+        'relative min-w-[3rem] rounded-lg border px-4 py-2 text-sm font-medium',
         'transition-all duration-150',
+        'cursor-pointer',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
         selected
           ? 'border-[#002b5b] bg-[#002b5b] text-white shadow-sm'
           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-        disabled &&
-          'opacity-40 cursor-not-allowed hover:bg-white hover:border-slate-200',
+        outOfStock && !selected && 'opacity-50',
+        outOfStock &&
+          selected &&
+          'border-[#002b5b]/60 bg-[#002b5b]/70 text-white shadow-sm',
       )}
     >
-      {children}
+      <span className={cn(outOfStock && 'line-through decoration-2')}>
+        {children}
+      </span>
     </button>
   );
 }
@@ -225,12 +228,12 @@ function Pill({
 function ColorSwatch({
   value,
   selected,
-  disabled,
+  outOfStock,
   onClick,
 }: {
   value: string;
   selected: boolean;
-  disabled: boolean;
+  outOfStock: boolean;
   onClick: () => void;
 }) {
   // Map common color names to actual hex values. Falls back to slate grey
@@ -242,23 +245,25 @@ function ColorSwatch({
       type="button"
       role="radio"
       aria-checked={selected}
-      aria-label={value}
-      title={value}
+      aria-label={outOfStock ? `${value} (out of stock)` : value}
+      title={outOfStock ? `${value} — out of stock` : value}
       onClick={onClick}
-      disabled={disabled}
       className={cn(
-        'group relative h-10 w-10 rounded-full',
+        'group relative h-10 w-10 rounded-full cursor-pointer',
         'transition-all duration-150',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
         selected
           ? 'ring-2 ring-offset-2 ring-[#002b5b]'
           : 'ring-1 ring-slate-200 hover:ring-slate-300',
-        disabled && 'opacity-40 cursor-not-allowed',
+        outOfStock && !selected && 'opacity-50',
       )}
     >
       <span
         aria-hidden
-        className="absolute inset-1 rounded-full border border-slate-200/60"
+        className={cn(
+          'absolute inset-1 rounded-full border border-slate-200/60',
+          outOfStock && 'border-dashed',
+        )}
         style={{ backgroundColor: swatchColor }}
       />
       {selected && (
@@ -267,6 +272,15 @@ function ColorSwatch({
           className="absolute inset-0 flex items-center justify-center text-white"
         >
           <Check size={16} strokeWidth={3} />
+        </span>
+      )}
+      {outOfStock && (
+        // Diagonal strike-through line across the swatch.
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          <span className="block h-px w-[120%] rotate-45 bg-slate-400/80" />
         </span>
       )}
     </button>

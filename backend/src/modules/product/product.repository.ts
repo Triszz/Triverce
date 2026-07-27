@@ -55,6 +55,9 @@ export class ProductRepository {
         orderBy,
         skip: (query.page - 1) * query.limit,
         take: query.limit,
+        include: {
+          seller: { select: { storeName: true } },
+        },
       }),
     ]);
 
@@ -71,6 +74,7 @@ export class ProductRepository {
         return ProductEntity.fromDatabase(
           row,
           variant ? [variant] : [],
+          row.seller?.storeName ?? null,
         );
       }),
       total,
@@ -151,21 +155,23 @@ export class ProductRepository {
   async findById(id: string): Promise<ProductEntity | null> {
     const row = await this.prisma.product.findFirst({
       where: { id, deletedAt: null },
+      include: { seller: { select: { storeName: true } } },
     });
     if (!row) return null;
 
     const variants = await this.loadVariantsWithAttributes(id);
-    return ProductEntity.fromDatabase(row, variants);
+    return ProductEntity.fromDatabase(row, variants, row.seller?.storeName ?? null);
   }
 
   async findBySlug(slug: string): Promise<ProductEntity | null> {
     const row = await this.prisma.product.findFirst({
       where: { slug, deletedAt: null },
+      include: { seller: { select: { storeName: true } } },
     });
     if (!row) return null;
 
     const variants = await this.loadVariantsWithAttributes(row.id);
-    return ProductEntity.fromDatabase(row, variants);
+    return ProductEntity.fromDatabase(row, variants, row.seller?.storeName ?? null);
   }
 
   async create(dto: CreateProductDto, sellerId: string): Promise<ProductEntity> {
@@ -236,7 +242,17 @@ export class ProductRepository {
         );
       }
 
-      return ProductEntity.fromDatabase(productRow, variantEntities);
+      // Re-fetch with seller so `storeName` is populated in the response.
+      const withSeller = await tx.product.findUnique({
+        where: { id: productRow.id },
+        include: { seller: { select: { storeName: true } } },
+      });
+
+      return ProductEntity.fromDatabase(
+        withSeller!,
+        variantEntities,
+        withSeller?.seller?.storeName ?? null,
+      );
     });
   }
 
@@ -267,9 +283,13 @@ export class ProductRepository {
     if (data.images !== undefined) updateData.images = { set: data.images };
 
     try {
-      const row = await this.prisma.product.update({ where: { id }, data: updateData });
+      const row = await this.prisma.product.update({
+        where: { id },
+        data: updateData,
+        include: { seller: { select: { storeName: true } } },
+      });
       const variants = await this.loadVariantsWithAttributes(id);
-      return ProductEntity.fromDatabase(row, variants);
+      return ProductEntity.fromDatabase(row, variants, row.seller?.storeName ?? null);
     } catch {
       return null;
     }

@@ -1,9 +1,8 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { PriceTag } from '@/components/ui/PriceTag';
-import { pickHeroImage, type ProductSummary } from '@/services/productService';
+import { ProductCard } from '@/features/catalog/components/ProductCard';
 import { cn } from '@/lib/cn';
+import type { ProductSummary } from '@/services/productService';
 
 interface ProductCarouselProps {
   products: ProductSummary[];
@@ -68,7 +67,9 @@ export function ProductCarousel({
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar pb-1 items-stretch"
       >
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <div key={product.id} className={cn('flex-shrink-0 snap-start', CARD_WIDTH)}>
+            <ProductCard product={product} />
+          </div>
         ))}
       </div>
 
@@ -91,58 +92,5 @@ export function ProductCarousel({
         <ChevronRight size={16} aria-hidden />
       </button>
     </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Individual product card — rendered inside the carousel.
- * Keeps the same visual language as the ProductGrid card used elsewhere.
- * ──────────────────────────────────────────────────────────────────────── */
-
-function ProductCard({ product }: { product: ProductSummary }) {
-  const href = `/product/${product.slug ?? product.id}`;
-
-  return (
-    <Link
-      to={href}
-      className={cn(
-        'group flex-shrink-0 snap-start',
-        CARD_WIDTH,
-        'rounded-xl overflow-hidden bg-white border border-slate-100',
-        'shadow-sm hover:shadow-md hover:-translate-y-0.5',
-        'transition-all duration-200 ease-out',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
-      )}
-    >
-      {/* Image */}
-      <div className="aspect-square overflow-hidden bg-slate-50">
-        {(() => {
-          const heroSrc = pickHeroImage(product);
-          return heroSrc ? (
-            <img
-              src={heroSrc}
-              alt={product.name}
-              loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <div className="h-full w-full flex items-center justify-center text-slate-300 text-2xl font-semibold">
-              {product.name.charAt(0).toUpperCase()}
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Info */}
-      <div className="p-3 space-y-1.5">
-        <p className="text-xs font-medium text-slate-400 uppercase tracking-wide truncate">
-          {product.categoryId ? 'Product' : 'Featured'}
-        </p>
-        <h3 className="text-sm font-medium text-slate-900 leading-snug line-clamp-2 group-hover:text-[#002b5b] transition-colors">
-          {product.name}
-        </h3>
-        <PriceTag value={product.minPrice ?? product.basePrice} size="sm" />
-      </div>
-    </Link>
   );
 }

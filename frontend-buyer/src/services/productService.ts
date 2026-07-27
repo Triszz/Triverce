@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import apiClient, { API_ORIGIN } from './apiClient';
 import type {
   ApiPaginatedResponse,
   ApiResponse,
@@ -45,6 +45,11 @@ export interface ProductSummary {
    * `imageUrl`.
    */
   images?: string[];
+  /**
+   * The seller's store name. Undefined when the seller has not set one.
+   * Backend populates this via `include: { seller: { select: { storeName: true } } }`.
+   */
+  storeName?: string | null;
 }
 
 /** One attribute value attached to a variant. */
@@ -107,6 +112,33 @@ export function pickHeroImage(product: ProductSummary | ProductDetail): string |
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * Helpers
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Convert a possibly-relative upload URL to an absolute URL against the
+ * backend origin. Relative paths (e.g. `/uploads/products/abc.webp`) become
+ * `http://localhost:3000/uploads/products/abc.webp`. Already-absolute URLs are
+ * returned unchanged.
+ */
+function qualifyUrl(url: string | null): string | null {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_ORIGIN}${url}`;
+}
+
+/**
+ * Qualify every image URL in a product summary or detail object.
+ */
+function qualifyProductImages<T extends { imageUrl?: string | null; images?: string[] }>(p: T): T {
+  return {
+    ...p,
+    imageUrl: qualifyUrl(p.imageUrl ?? null),
+    images: p.images?.map(qualifyUrl) ?? [],
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Query / payload types
  * ────────────────────────────────────────────────────────────────────────── */
 
@@ -114,10 +146,13 @@ export interface ProductListParams {
   page?: number;
   limit?: number;
   categoryId?: string;
+  /** Filter to products belonging to a specific seller. */
+  sellerId?: string;
   search?: string;
   sortBy?: ProductSort;
   minPrice?: number;
   maxPrice?: number;
+  /** Defaults to `true` on the backend when absent. */
   isActive?: boolean;
 }
 
@@ -153,7 +188,7 @@ export const productService = {
     );
     if (!data.success) throw new Error('Failed to load products');
     return {
-      data: data.data,
+      data: data.data.map(qualifyProductImages),
       total: data.meta.total,
       page: data.meta.page,
       limit: data.meta.limit,
@@ -168,7 +203,7 @@ export const productService = {
       `/products/${id}`,
     );
     if (!data.success) throw new Error('Product not found');
-    return data.data;
+    return qualifyProductImages(data.data);
   },
 
   /**
@@ -180,6 +215,6 @@ export const productService = {
       `/products/slug/${slug}`,
     );
     if (!data.success) throw new Error('Product not found');
-    return data.data;
+    return qualifyProductImages(data.data);
   },
 };

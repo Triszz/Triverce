@@ -71,11 +71,21 @@ export class OrderService {
       //   (b) each seller's order total is correct,
       //   (c) the gateway session amount matches the payment row.
       // This avoids a second round-trip to recalculate after orders are created.
-      const sellerPricing = new Map<string, { subtotal: number; shippingFee: number; total: number }>();
+      const sellerPricing = new Map<
+        string,
+        { subtotal: number; shippingFee: number; total: number }
+      >();
       for (const [sellerId, items] of sellerGroups) {
-        const subtotal = items.reduce((s, it) => s + (it.variantPrice ?? 0) * it.quantity, 0);
-        const shippingFee = subtotal >= 500000 ? 0 : 30000;
-        sellerPricing.set(sellerId, { subtotal, shippingFee, total: subtotal + shippingFee });
+        const subtotal = items.reduce(
+          (s, it) => s + (it.variantPrice ?? 0) * it.quantity,
+          0,
+        );
+        const shippingFee = subtotal > 500000 ? 0 : 30000;
+        sellerPricing.set(sellerId, {
+          subtotal,
+          shippingFee,
+          total: subtotal + shippingFee,
+        });
       }
 
       if (dto.gateway === "cod") {
@@ -119,7 +129,10 @@ export class OrderService {
       } else {
         // Non-COD: one shared payment row for the whole cart.
         // Amount = sum of all per-seller order totals (each with shipping).
-        cartTotal = Array.from(sellerPricing.values()).reduce((s, p) => s + p.total, 0);
+        cartTotal = Array.from(sellerPricing.values()).reduce(
+          (s, p) => s + p.total,
+          0,
+        );
         singlePaymentId = await this.paymentRepository.create(
           {
             customerId,
@@ -340,7 +353,8 @@ export class OrderService {
     if (!order) throw new NotFoundError(`Order with id "${orderId}" not found`);
 
     if (user.role === "customer") {
-      if (order.customerId !== user.userId) throw new ForbiddenError("Access denied");
+      if (order.customerId !== user.userId)
+        throw new ForbiddenError("Access denied");
       if (!order.canBeCancelledByCustomer())
         throw new BadRequestError(
           `Cannot cancel order with status "${order.status}"`,
@@ -507,7 +521,7 @@ export class OrderService {
     //    `subtotal` is pre-computed by the caller (single source of truth
     //    for both the payment row and the order total below).
     //    Shipping rule: free for orders >= 500,000 VND, otherwise 30,000 VND.
-    const shippingFee = subtotal >= 500000 ? 0 : 30000;
+    const shippingFee = subtotal > 500000 ? 0 : 30000;
     const totalAmount = subtotal + shippingFee;
 
     // 4. Create order

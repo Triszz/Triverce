@@ -135,4 +135,45 @@ export class UserRepository {
     });
     return !!found;
   }
+
+  /**
+   * Returns a public store profile for a seller: basic info + active product count.
+   * Returns null if the user doesn't exist, is deleted, or isn't a seller.
+   */
+  async findPublicStoreProfile(
+    sellerId: string,
+  ): Promise<{
+    id: string;
+    storeName: string | null;
+    logoUrl: string | null;
+    description: string | null;
+    createdAt: Date;
+    productCount: number;
+  } | null> {
+    const [user, productCount] = await Promise.all([
+      this.prisma.user.findFirst({
+        where: { id: sellerId, deletedAt: null, role: 'seller' },
+        select: {
+          id: true,
+          storeName: true,
+          logoUrl: true,
+          description: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.product.count({
+        where: { sellerId, isActive: true, deletedAt: null },
+      }),
+    ]);
+
+    if (!user) return null;
+    return {
+      id: user.id,
+      storeName: user.storeName,
+      logoUrl: user.logoUrl,
+      description: user.description,
+      createdAt: user.createdAt,
+      productCount,
+    };
+  }
 }

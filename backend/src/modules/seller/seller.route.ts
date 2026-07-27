@@ -33,5 +33,18 @@ export function createSellerRouter(controller: SellerController): Router {
     controller.updateStoreProfile,
   );
 
+  /**
+   * GET /api/seller/:sellerId
+   *
+   * Returns a seller's public storefront profile: storeName, logo,
+   * description, joined date, and active product count.
+   * No authentication required — public-facing endpoint for buyers.
+   * Placed AFTER /profile so the static path is matched first.
+   */
+  router.get(
+    "/:sellerId",
+    controller.getPublicStoreProfile,
+  );
+
   return router;
 }

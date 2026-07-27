@@ -4,6 +4,9 @@ const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   'http://localhost:3000/api';
 
+/** The backend origin (e.g. "http://localhost:3000") — used to qualify relative upload URLs. */
+export const API_ORIGIN = BASE_URL.replace(/\/api\/?$/, '');
+
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,

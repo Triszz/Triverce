@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Store } from 'lucide-react';
 import type { ProductSummary } from '@/services/productService';
 import { pickHeroImage } from '@/services/productService';
 import { PriceTag } from '@/components/ui/PriceTag';
@@ -43,11 +45,10 @@ export interface ProductCardProps {
  *   • Wraps the entire card in a Link so the whole surface is clickable.
  */
 export function ProductCard({ product, className }: ProductCardProps) {
+  const [imgError, setImgError] = useState(false);
   const hasPriceRange = product.minPrice !== product.maxPrice;
-  // Use the shared picker so cards render the same hero regardless of
-  // whether the backend populated the new `images[]` or the legacy
-  // `imageUrl` field (or both).
   const heroSrc = pickHeroImage(product);
+  const showPlaceholder = !heroSrc || imgError;
 
   return (
     <Link
@@ -62,19 +63,20 @@ export function ProductCard({ product, className }: ProductCardProps) {
       )}
     >
       <div className="relative aspect-square bg-slate-50 overflow-hidden">
-        {heroSrc ? (
+        {showPlaceholder ? (
+          <PlaceholderImage name={product.name} />
+        ) : (
           <img
             src={heroSrc}
             alt={product.name}
             loading="lazy"
+            onError={() => setImgError(true)}
             className={cn(
               'h-full w-full object-cover',
               'transition-transform duration-300 ease-out',
               'group-hover:scale-105',
             )}
           />
-        ) : (
-          <PlaceholderImage name={product.name} />
         )}
         {!product.isActive && (
           <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md">
@@ -84,6 +86,27 @@ export function ProductCard({ product, className }: ProductCardProps) {
       </div>
 
       <div className="p-4 space-y-2">
+        {product.storeName && (
+          <p
+            className="text-xs font-medium text-slate-500 truncate flex items-center gap-1"
+            title={product.storeName}
+          >
+            <Store size={11} className="shrink-0 text-slate-400" aria-hidden />
+            {/*
+              Link to the store profile page.
+              stopPropagation prevents the card's outer <Link> from navigating
+              to the product page when the user clicks the store name.
+            */}
+            <Link
+              to={`/store/${product.sellerId}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hover:text-[#002b5b] hover:underline transition-colors"
+            >
+              {product.storeName}
+            </Link>
+          </p>
+        )}
+
         <h3
           className={cn(
             'text-sm font-semibold text-slate-900 leading-snug line-clamp-2',

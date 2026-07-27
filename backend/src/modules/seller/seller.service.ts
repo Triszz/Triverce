@@ -10,6 +10,16 @@ export interface StoreProfileDto {
   address: string;
 }
 
+/** Shape returned by the public store profile endpoint. */
+export interface PublicStoreProfile {
+  id: string;
+  storeName: string | null;
+  logoUrl: string | null;
+  description: string | null;
+  joinedAt: Date;
+  productCount: number;
+}
+
 export class SellerService {
   constructor(private userRepository: UserRepository) {}
 
@@ -25,6 +35,21 @@ export class SellerService {
       throw new NotFoundError("Seller account not found");
     }
     return user.toStoreProfile();
+  }
+
+  /**
+   * Retrieve a seller's public storefront profile by seller ID.
+   * Used by buyers visiting `/store/:sellerId`.
+   */
+  async getPublicStoreProfile(sellerId: string): Promise<PublicStoreProfile> {
+    const profile = await this.userRepository.findPublicStoreProfile(sellerId);
+    if (!profile) {
+      throw new NotFoundError("Store not found");
+    }
+    return {
+      ...profile,
+      joinedAt: profile.createdAt,
+    };
   }
 
   /**
