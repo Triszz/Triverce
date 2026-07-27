@@ -1,18 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ShoppingBag, LogIn, ChevronLeft, Lock, Truck } from 'lucide-react';
+import { ShoppingBag, LogIn, ChevronLeft, Lock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useCart } from '@/hooks/useCart';
 import { useUiStore } from '@/stores/useUiStore';
 import { orderService, type CheckoutResponse } from '@/services/orderService';
 import { paymentService } from '@/services/paymentService';
-import {
-  GatewaySelector,
-  type CheckoutGateway,
-} from '@/features/checkout/GatewaySelector';
-import { ShippingForm } from '@/features/checkout/ShippingForm';
+import { GatewaySelector, type CheckoutGateway } from '@/features/checkout/GatewaySelector';
 import {
   OrderSummary,
   PlaceOrderButton,
@@ -21,9 +17,11 @@ import { PageMeta } from '@/components/common/PageMeta';
 import {
   deriveShippingFee,
   formatVND,
-  type ShippingFormHandle,
-  type ShippingFormValues,
 } from '@/features/checkout/checkout.types';
+import { AddressBook } from '@/features/address/components/AddressBook';
+import { useAddresses } from '@/features/address/hooks/useAddresses';
+import { useCreateAddress } from '@/features/address/hooks/useAddresses';
+import type { ShippingFormValues } from '@/features/checkout/checkout.types';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * CheckoutPage — `/checkout`
@@ -31,42 +29,34 @@ import {
  * Flow:
  *   1. Auth gate → /auth/login if guest
  *   2. Cart gate → /cart if empty
- *   3. Render form + gateway picker + summary
- *   4. Submit →
- *        a. orderService.createOrder — creates the order(s) + Payment(s).
+ *   3. AddressBook (saved addresses + new address form)
+ *      → "Use this address" confirms the selection into local state only
+ *   4. "Place order" button (summary sidebar) →
+ *        a. orderService.createOrder — creates order(s) + Payment(s).
  *           For VNPay the backend also calls the gateway to mint a URL.
  *        b. We rebuild the return/cancel URLs with the *real* paymentId
- *           and call paymentService.retry to get a fresh gateway URL
- *           (this lets us echo `?paymentId=…` back to the return page
- *           so PaymentReturnPage can verify without an extra lookup).
+ *           and call paymentService.retry to get a fresh gateway URL.
  *        c. Redirect (VNPay) or navigate to /orders (COD).
  *
- * Why the two-call pattern for VNPay?
- *   The backend creates the Payment record with a generated paymentId,
- *   then immediately forwards a session request to VNPay with whatever
- *   returnUrl the client passed in. To guarantee the paymentId ends up
- *   in the echoed returnUrl we re-issue the gateway session after the
- *   checkout call. paymentService.retry is idempotent for `pending`
- *   payments (see backend/src/modules/payment/payment.service.ts).
- *
- * Backend notes:
- *   • Inventory is locked inside the checkout transaction. If any variant
- *     is short-stocked the controller returns a 400 with the offending
- *     SKU in the message — we surface that via a Sonner toast.
+ * Key invariant: the checkout API call only fires from the "Place order"
+ * button. Address selection is purely local state (confirmedValues).
  * ──────────────────────────────────────────────────────────────────────── */
 
 const RETURN_PATH = '/checkout/return';
 
 export function CheckoutPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { cart, totalPrice, isLoading, isError } = useCart();
+  const { cart, totalPrice, isLoading: isCartLoading, isError } = useCart();
   const navigate = useNavigate();
   const openCartDrawer = useUiStore((s) => s.openCartDrawer);
 
   const [gateway, setGateway] = useState<CheckoutGateway>('vnpay');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  /** Pre-filled values when the user has confirmed an address selection. */
+  const [confirmedValues, setConfirmedValues] = useState<ShippingFormValues | null>(null);
 
-  const shippingFormRef = useRef<ShippingFormHandle>(null);
+  const { data: addresses = [], isLoading: isAddressesLoading } = useAddresses(isAuthenticated);
+  const { mutateAsync: createAddress, isPending: isCreatingAddress } = useCreateAddress();
 
   /* ── Derived ─────────────────────────────────────────────────────────── */
 
@@ -75,11 +65,8 @@ export function CheckoutPage() {
   const shipping = useMemo(() => deriveShippingFee(subtotal), [subtotal]);
   const total = subtotal + shipping;
 
-  /**
-   * Build absolute return/cancel URLs that include the paymentId so the
-   * PaymentReturnPage can verify without an extra lookup. The gateway
-   * echoes the return URL back to the browser after the user finishes.
-   */
+  /* ── URL helpers ─────────────────────────────────────────────────────── */
+
   const buildReturnUrls = (paymentId: string) => {
     const origin = window.location.origin;
     const tail = `?paymentId=${encodeURIComponent(paymentId)}`;
@@ -89,7 +76,8 @@ export function CheckoutPage() {
     };
   };
 
-  /** Surface the backend's `message` field from a 400 / network error. */
+  /* ── Error formatter ─────────────────────────────────────────────────── */
+
   const formatError = (err: unknown): string => {
     const anyErr = err as {
       response?: { data?: { message?: string } };
@@ -102,18 +90,12 @@ export function CheckoutPage() {
     );
   };
 
-  const handleSubmit = async (values: ShippingFormValues) => {
-    if (items.length === 0) {
-      toast.error('Your cart is empty.');
-      navigate('/cart', { replace: true });
-      return;
-    }
+  /* ── Place order (final submission) ───────────────────────────────── */
 
+  const placeOrder = async (values: ShippingFormValues) => {
     setIsSubmitting(true);
     try {
-      // 1) Create order(s) + Payment record(s). Use a placeholder URL
-      //    for the first hop — the gateway will echo whichever URL we
-      //    send on the *retry* call below.
+      // 1) Create order(s) + Payment record(s) with a placeholder URL.
       const provisionalUrls = buildReturnUrls('pending');
       const response: CheckoutResponse = await orderService.createOrder({
         shippingName: values.shippingName,
@@ -128,12 +110,9 @@ export function CheckoutPage() {
       // 2) Branch on gateway.
       if (gateway === 'vnpay') {
         const paymentId = response.paymentId;
-        if (!paymentId) {
-          throw new Error('Missing paymentId in checkout response');
-        }
+        if (!paymentId) throw new Error('Missing paymentId in checkout response');
 
-        // Re-issue the gateway session with the *real* paymentId in the
-        // return URL so the PaymentReturnPage can verify on arrival.
+        // Re-issue the gateway session with the *real* paymentId in the return URL.
         const urls = buildReturnUrls(paymentId);
         const retry = await paymentService.retry(paymentId, urls);
         if (!retry.paymentUrl) {
@@ -141,17 +120,15 @@ export function CheckoutPage() {
         }
 
         toast.success('Order created — redirecting to VNPay…');
-        // Hard navigation to the sandbox URL.
         window.location.href = retry.paymentUrl;
         return;
       }
 
-      // COD path — no gateway redirect, just confirm and head to /orders.
+      // COD path
       toast.success('Order placed! Pay when your order arrives.');
       navigate('/orders', { replace: true });
     } catch (err) {
       const message = formatError(err);
-      // Specific handling: inventory / stock issues get a clearer toast.
       const lower = message.toLowerCase();
       if (lower.includes('stock') || lower.includes('inventory')) {
         toast.error(message, {
@@ -169,7 +146,52 @@ export function CheckoutPage() {
     }
   };
 
-  /* ── Render: auth gate ───────────────────────────────────────────────── */
+  /* ── Address selection handlers ──────────────────────────────────────── */
+
+  /**
+   * Confirms an address (saved or new) and stores it in local state.
+   * Does NOT place the order — that only happens via `handlePlaceOrderClick`.
+   */
+  const handleAddressSelect = (values: ShippingFormValues) => {
+    setConfirmedValues(values);
+  };
+
+  /**
+   * Called by the AddressBook when the user clicks "Add new address".
+   * Clears the confirmed address so the Place Order button is re-locked
+   * until the new form is successfully submitted.
+   */
+  const handleAddNewAddress = () => {
+    setConfirmedValues(null);
+  };
+
+  /**
+   * Same as `handleAddressSelect` but first saves the address to the user's
+   * address book before confirming it (for "Save + checkout" flows).
+   * Does NOT place the order.
+   */
+  const handleSaveNewAndCheckout = async (values: ShippingFormValues) => {
+    try {
+      await createAddress({
+        recipientName: values.shippingName,
+        phone: values.shippingPhone,
+        address: values.shippingAddress,
+      });
+      toast.success('Address saved to your address book.');
+    } catch {
+      // Non-fatal — still confirm and let the user retry saving manually.
+      toast.error('Could not save address, but continuing…');
+    }
+    setConfirmedValues(values);
+  };
+
+  /** Called when the user clicks "Place order" in the summary sidebar. */
+  const handlePlaceOrderClick = () => {
+    if (!confirmedValues) return;
+    void placeOrder(confirmedValues);
+  };
+
+  /* ── Render: auth gate ─────────────────────────────────────────────── */
 
   if (!isAuthenticated) {
     return (
@@ -191,9 +213,9 @@ export function CheckoutPage() {
     );
   }
 
-  /* ── Render: loading ─────────────────────────────────────────────────── */
+  /* ── Render: loading ────────────────────────────────────────────────── */
 
-  if (isLoading) {
+  if (isCartLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <Skeleton className="h-8 w-48 mb-6" />
@@ -210,17 +232,13 @@ export function CheckoutPage() {
     );
   }
 
-  /* ── Render: error / empty (redirect to /cart) ───────────────────────── */
+  /* ── Render: error / empty ─────────────────────────────────────────── */
 
   if (isError || items.length === 0) {
     return <Navigate to="/cart" replace />;
   }
 
-  /* ── Render: checkout form ───────────────────────────────────────────── */
-
-  const handlePlaceOrder = () => {
-    shippingFormRef.current?.submit();
-  };
+  /* ── Render: checkout form ─────────────────────────────────────────── */
 
   return (
     <>
@@ -228,94 +246,125 @@ export function CheckoutPage() {
         title="Checkout"
         description="Review your order, enter shipping details, and choose a payment method."
       />
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Top breadcrumb-ish header */}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={() => navigate('/cart')}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-2"
-          >
-            <ChevronLeft size={12} aria-hidden />
-            Back to cart
-          </button>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-            Checkout
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Review your shipping details, pick a payment method, and place your order.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCartDrawer}
-          className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 h-10 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-        >
-          <ShoppingBag size={14} aria-hidden />
-          View cart
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* ── Left column: form + gateway picker ─────────────────────── */}
-        <section className="lg:col-span-2 space-y-6">
-          {/* Shipping form */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-            <header className="mb-5 flex items-center gap-2">
-              <Truck size={16} className="text-[#002b5b]" aria-hidden />
-              <h2 className="text-base font-semibold text-slate-900">
-                Shipping details
-              </h2>
-            </header>
-            <ShippingForm ref={shippingFormRef} onSubmit={handleSubmit} />
-          </div>
-
-          {/* Gateway picker */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-            <header className="mb-5 flex items-center gap-2">
-              <Lock size={16} className="text-[#002b5b]" aria-hidden />
-              <h2 className="text-base font-semibold text-slate-900">
-                Payment method
-              </h2>
-            </header>
-            <GatewaySelector value={gateway} onChange={setGateway} />
-
-            <p className="mt-4 text-xs text-slate-500">
-              {gateway === 'vnpay'
-                ? "You'll be redirected to the VNPay sandbox to complete payment. Your order will be confirmed automatically once the payment succeeds."
-                : 'Pay in cash when your order is delivered. Please keep the exact amount ready if possible.'}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Breadcrumb header */}
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <button
+              type="button"
+              onClick={() => navigate('/cart')}
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-2"
+            >
+              <ChevronLeft size={12} aria-hidden />
+              Back to cart
+            </button>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Checkout</h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Select a saved address or enter new shipping details.
             </p>
           </div>
-        </section>
+          <button
+            type="button"
+            onClick={openCartDrawer}
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 h-10 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <ShoppingBag size={14} aria-hidden />
+            View cart
+          </button>
+        </div>
 
-        {/* ── Right column: summary ─────────────────────────────────── */}
-        <section className="lg:col-span-1">
-          <OrderSummary
-            items={items}
-            subtotal={subtotal}
-            action={
-              <>
-                <p className="mb-3 text-center text-xs text-slate-500">
-                  By placing this order you agree to our terms of service.
-                  {gateway === 'vnpay'
-                    ? ` You'll be charged ${formatVND(total)}.`
-                    : ` You'll pay ${formatVND(total)} on delivery.`}
-                </p>
-                <PlaceOrderButton
-                  isLoading={isSubmitting}
-                  onSubmit={handlePlaceOrder}
-                  label={`Place order · ${formatVND(total)}`}
-                  loadingLabel={
-                    gateway === 'vnpay' ? 'Redirecting to VNPay…' : 'Placing order…'
-                  }
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* ── Left column: address book + gateway picker ────────────────── */}
+          <section className="lg:col-span-2 space-y-6">
+            {/* Address book */}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+              <header className="mb-5 flex items-center gap-2">
+                <span className="text-[#002b5b]" aria-hidden>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
+                </span>
+                <h2 className="text-base font-semibold text-slate-900">
+                  Shipping address
+                </h2>
+              </header>
+
+              {isAddressesLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : (
+                <AddressBook
+                  addresses={addresses}
+                  onSelect={handleAddressSelect}
+                  onSaveNew={handleSaveNewAndCheckout}
+                  isCreating={isCreatingAddress}
+                  onAddNew={handleAddNewAddress}
                 />
-              </>
-            }
-          />
-        </section>
+              )}
+            </div>
+
+            {/* Gateway picker */}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+              <header className="mb-5 flex items-center gap-2">
+                <Lock size={16} className="text-[#002b5b]" aria-hidden />
+                <h2 className="text-base font-semibold text-slate-900">
+                  Payment method
+                </h2>
+              </header>
+              <GatewaySelector value={gateway} onChange={setGateway} />
+              <p className="mt-4 text-xs text-slate-500">
+                {gateway === 'vnpay'
+                  ? "You'll be redirected to VNPay to complete payment. Your order will be confirmed automatically once the payment succeeds."
+                  : 'Pay in cash when your order is delivered. Please keep the exact amount ready if possible.'}
+              </p>
+            </div>
+          </section>
+
+          {/* ── Right column: summary ─────────────────────────────────── */}
+          <section className="lg:col-span-1">
+            <OrderSummary
+              items={items}
+              subtotal={subtotal}
+              action={
+                <>
+                  <p className="mb-3 text-center text-xs text-slate-500">
+                    By placing this order you agree to our terms of service.
+                    {gateway === 'vnpay'
+                      ? ` You'll be charged ${formatVND(total)}.`
+                      : ` You'll pay ${formatVND(total)} on delivery.`}
+                  </p>
+                  <PlaceOrderButton
+                    isLoading={isSubmitting}
+                    disabled={!confirmedValues}
+                    onSubmit={handlePlaceOrderClick}
+                    label={`Place order · ${formatVND(total)}`}
+                    loadingLabel={
+                      gateway === 'vnpay' ? 'Redirecting to VNPay…' : 'Placing order…'
+                    }
+                  />
+                  {!confirmedValues ? (
+                    <p className="mt-2 text-center text-xs text-slate-500">
+                      Select a shipping address above to continue.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmedValues(null)}
+                      className="mt-2 w-full text-center text-xs font-medium text-[#002b5b] hover:text-[#001f3f] underline-offset-2 hover:underline transition-colors cursor-pointer"
+                    >
+                      Change address
+                    </button>
+                  )}
+                </>
+              }
+            />
+          </section>
+        </div>
       </div>
-    </div>
     </>
   );
 }

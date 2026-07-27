@@ -282,7 +282,11 @@ export function OrderDetailPage() {
               <div className="flex items-center justify-between">
                 <dt className="text-slate-500">Shipping</dt>
                 <dd className="text-slate-700 tabular-nums">
-                  {formatVND(0)}
+                  {order.shippingFee === 0 ? (
+                    <span className="text-success-700 font-medium">Free</span>
+                  ) : (
+                    formatVND(order.shippingFee)
+                  )}
                 </dd>
               </div>
               <div className="border-t border-slate-200 pt-2 mt-2 flex items-center justify-between">

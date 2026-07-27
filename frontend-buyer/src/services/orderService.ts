@@ -38,6 +38,7 @@ export interface OrderPublic {
   sellerId: string;
   status: 'pending' | 'confirmed' | 'shipping' | 'delivered' | 'cancelled' | 'failed';
   totalAmount: number;
+  shippingFee: number;
   shippingName: string;
   shippingPhone: string;
   shippingAddress: string;

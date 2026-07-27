@@ -159,6 +159,8 @@ export interface Order {
   sellerId: string;
   status: OrderStatus;
   totalAmount: number;
+  /** Shipping fee charged on this order. Zero when the subtotal qualified for free shipping. */
+  shippingFee: number;
   shippingName: string;
   shippingPhone: string;
   shippingAddress: string;

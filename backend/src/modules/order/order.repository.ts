@@ -60,6 +60,7 @@ export class OrderRepository {
       customerId: string;
       sellerId: string;
       totalAmount: number;
+      shippingFee: number;
       shippingName: string;
       shippingPhone: string;
       shippingAddress: string;
@@ -73,6 +74,7 @@ export class OrderRepository {
         customerId: data.customerId,
         sellerId: data.sellerId,
         totalAmount: data.totalAmount,
+        shippingFee: data.shippingFee,
         shippingName: data.shippingName,
         shippingPhone: data.shippingPhone,
         shippingAddress: data.shippingAddress,

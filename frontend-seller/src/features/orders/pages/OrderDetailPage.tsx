@@ -211,10 +211,8 @@ export function OrderDetailPage() {
 
   const validNextStatuses = nextOrderStatuses(order.status);
   const subtotal = order.items.reduce((sum, i) => sum + i.subtotal, 0);
-  const shippingFee = order.totalAmount - subtotal; // No shipping breakdown on the wire; derive from grand total.
-  // shippingFee can be negative if pricing rules change — clamp to 0
-  // for display so the totals card never shows a credit under "Shipping".
-  const displayShipping = Math.max(0, shippingFee);
+  /** `shippingFee` is now exposed on the order wire so we use it directly. */
+  const displayShipping = Math.max(0, order.shippingFee ?? 0);
 
   const isAnyActionPending = statusMutation.isPending || cancelMutation.isPending;
 

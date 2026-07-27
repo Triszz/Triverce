@@ -17,7 +17,8 @@ import type { CartItemPublic } from '@/services/cartService';
  * Field shape mirrors the backend `CreateOrderDto` exactly (see
  * backend/src/modules/order/order.dto.ts):
  *   • shippingName     — required, ≥ 2 chars
- *   • shippingPhone    — required, 9–11 digits (Vietnam format)
+ *   • shippingPhone    — required, 10-digit Vietnamese mobile number
+ *                        (valid prefixes: 03x, 05x, 07x, 08x, 09x)
  *   • shippingAddress  — required, ≥ 10 chars
  *   • note             — optional, ≤ 500 chars
  */
@@ -25,15 +26,18 @@ export const shippingSchema = z.object({
   shippingName: z
     .string()
     .trim()
-    .min(2, 'Please enter the recipient name (at least 2 characters)'),
+    .min(2, "Please enter the recipient name (at least 2 characters)"),
   shippingPhone: z
     .string()
     .trim()
-    .regex(/^[0-9]{9,11}$/, 'Phone number must be 9–11 digits'),
+    .regex(
+      /^(0[35789])\d{8}$/,
+      "Enter a valid 10-digit Vietnamese mobile number (e.g. 0901234567)",
+    ),
   shippingAddress: z
     .string()
     .trim()
-    .min(10, 'Please enter a complete shipping address'),
+    .min(10, "Please enter a complete shipping address (at least 10 characters)"),
   note: z
     .string()
     .trim()

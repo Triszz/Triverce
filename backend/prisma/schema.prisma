@@ -95,6 +95,7 @@ model User {
   payments         Payment[]
   orderStatusLogs  OrderStatusLog[]
   notifications    Notification[]   @relation("SellerNotifications")
+  addresses       UserAddress[]
 
   @@index([email], map: "idx_users_email")
   @@map("users")
@@ -260,6 +261,7 @@ model Order {
   paymentId       String?     @map("payment_id") @db.Uuid
   status          OrderStatus @default(pending)
   totalAmount     Decimal     @map("total_amount") @db.Decimal(15, 2)
+  shippingFee     Decimal     @default(0) @map("shipping_fee") @db.Decimal(15, 2)
   shippingName    String      @map("shipping_name") @db.VarChar(255)
   shippingPhone   String      @map("shipping_phone") @db.VarChar(20)
   shippingAddress String      @map("shipping_address")
@@ -385,4 +387,29 @@ model Notification {
   @@index([sellerId, isRead], map: "idx_notifications_seller_id_is_read")
   @@index([sellerId, createdAt], map: "idx_notifications_seller_id_created_at")
   @@map("notifications")
+}
+
+// ──────────────────────────────────────────────────────────────
+// User addresses
+//
+// Persisted shipping addresses for the buyer checkout flow.
+// Customers can save multiple addresses and mark one as default.
+// The checkout service auto-saves any new address at order time,
+// so returning customers don't need to re-enter the same info.
+// ──────────────────────────────────────────────────────────────
+
+model UserAddress {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  recipientName String  @map("recipient_name") @db.VarChar(255)
+  phone        String   @db.VarChar(20)
+  address      String   @db.VarChar(500)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_user_addresses_user_id")
+  @@map("user_addresses")
 }

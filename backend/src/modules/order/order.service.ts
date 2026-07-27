@@ -15,6 +15,7 @@ import { CartRepository } from "../cart/cart.repository";
 import { PaymentRepository } from "../payment/payment.repository";
 import type { IPaymentGateway } from "../payment/payment.interface";
 import type { INotificationService } from "../../core/interfaces/INotificationService";
+import type { IUserAddressService } from "../../core/interfaces/IUserAddressService";
 
 /**
  * OrderService — Prisma-aware.
@@ -32,6 +33,7 @@ export class OrderService {
     private gateway: IPaymentGateway,
     private prisma: PrismaClient,
     private notifications: INotificationService,
+    private userAddresses: IUserAddressService,
   ) {}
 
   async checkout(
@@ -56,28 +58,34 @@ export class OrderService {
       sellerGroups.get(sellerId)!.push(item);
     }
 
-    const totalAmount = cart.items.reduce(
-      (sum, item) => sum + (item.variantPrice ?? 0) * item.quantity,
-      0,
-    );
-
     const createdOrders: OrderEntity[] = [];
 
     let singlePaymentId: string | undefined;
     const codPaymentIds: string[] = [];
+    // Will hold the sum of all per-seller order totals for the gateway call.
+    let cartTotal = 0;
 
     await this.prisma.$transaction(async (trx) => {
+      // Pre-compute per-seller subtotals and shipping so:
+      //   (a) the shared payment row amount is correct,
+      //   (b) each seller's order total is correct,
+      //   (c) the gateway session amount matches the payment row.
+      // This avoids a second round-trip to recalculate after orders are created.
+      const sellerPricing = new Map<string, { subtotal: number; shippingFee: number; total: number }>();
+      for (const [sellerId, items] of sellerGroups) {
+        const subtotal = items.reduce((s, it) => s + (it.variantPrice ?? 0) * it.quantity, 0);
+        const shippingFee = subtotal >= 500000 ? 0 : 30000;
+        sellerPricing.set(sellerId, { subtotal, shippingFee, total: subtotal + shippingFee });
+      }
+
       if (dto.gateway === "cod") {
         for (const [sellerId, items] of sellerGroups) {
-          const orderTotal = items.reduce(
-            (sum, it) => sum + (it.variantPrice ?? 0) * it.quantity,
-            0,
-          );
+          const { subtotal } = sellerPricing.get(sellerId)!;
 
           const paymentId = await this.paymentRepository.create(
             {
               customerId,
-              amount: orderTotal,
+              amount: subtotal,
               currency: "VND",
               gateway: "cod",
               idempotencyKey: `checkout_cod_${cart.id}_${sellerId}`,
@@ -93,14 +101,10 @@ export class OrderService {
             dto,
             paymentId,
             trx,
+            subtotal,
           );
           createdOrders.push(order);
 
-          // Publish a NEW_ORDER notification to the seller inside the
-          // same transaction — guarantees the notification can never
-          // be persisted without the order, or vice versa. The order
-          // id is the natural `actionUrl` (full UUID; the dashboard
-          // already routes by /orders/:id).
           await this.notifications.create(
             {
               sellerId,
@@ -113,10 +117,13 @@ export class OrderService {
           );
         }
       } else {
+        // Non-COD: one shared payment row for the whole cart.
+        // Amount = sum of all per-seller order totals (each with shipping).
+        cartTotal = Array.from(sellerPricing.values()).reduce((s, p) => s + p.total, 0);
         singlePaymentId = await this.paymentRepository.create(
           {
             customerId,
-            amount: totalAmount,
+            amount: cartTotal,
             currency: "VND",
             gateway: dto.gateway ?? "momo",
             idempotencyKey: `checkout_cart_${cart.id}`,
@@ -132,6 +139,7 @@ export class OrderService {
             dto,
             singlePaymentId,
             trx,
+            sellerPricing.get(sellerId)!.subtotal,
           );
           createdOrders.push(order);
 
@@ -154,6 +162,25 @@ export class OrderService {
         where: { id: cart.id },
         data: { status: "checked_out" },
       });
+
+      // Auto-save the shipping address if it's not already in the user's
+      // address book. Runs inside the same transaction so the save and the
+      // order creation are atomic — a failed address insert won't block the
+      // order. This is best-effort (non-blocking) so address-book errors
+      // don't abort the checkout.
+      await this.userAddresses
+        .createIfNotDuplicate(
+          customerId,
+          dto.shippingName,
+          dto.shippingPhone,
+          dto.shippingAddress,
+          trx,
+        )
+        .catch((err) => {
+          // Log but don't re-throw — checkout must not fail due to an
+          // optional address-book save failure.
+          console.warn("[AddressBook] Failed to auto-save address:", err);
+        });
     });
 
     let paymentUrl = dto.returnUrl;
@@ -170,7 +197,7 @@ export class OrderService {
     try {
       const session = await this.gateway.createSession({
         paymentId: singlePaymentId!,
-        amount: totalAmount,
+        amount: cartTotal,
         currency: "VND",
         returnUrl: dto.returnUrl,
         cancelUrl: dto.cancelUrl,
@@ -452,6 +479,9 @@ export class OrderService {
     dto: CreateOrderDto,
     paymentId: string,
     trx: Prisma.TransactionClient,
+    /** Pre-computed subtotal from the caller to guarantee the payment row
+     *  and the order row use the same authoritative base amount. */
+    subtotal: number,
   ): Promise<OrderEntity> {
     // 1. Lock inventory rows
     const variantIds = items.map((i) => i.variantId);
@@ -473,11 +503,12 @@ export class OrderService {
         );
     }
 
-    // 3. Total
-    const totalAmount = items.reduce(
-      (sum, item) => sum + (item.variantPrice ?? 0) * item.quantity,
-      0,
-    );
+    // 3. Strict backend pricing: we NEVER trust client-submitted totals.
+    //    `subtotal` is pre-computed by the caller (single source of truth
+    //    for both the payment row and the order total below).
+    //    Shipping rule: free for orders >= 500,000 VND, otherwise 30,000 VND.
+    const shippingFee = subtotal >= 500000 ? 0 : 30000;
+    const totalAmount = subtotal + shippingFee;
 
     // 4. Create order
     const orderId = await this.orderRepository.createOrder(
@@ -485,6 +516,7 @@ export class OrderService {
         customerId,
         sellerId,
         totalAmount,
+        shippingFee,
         shippingName: dto.shippingName,
         shippingPhone: dto.shippingPhone,
         shippingAddress: dto.shippingAddress,

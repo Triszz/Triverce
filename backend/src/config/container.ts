@@ -37,6 +37,9 @@ import { SellerController } from "../modules/seller/seller.controller";
 import { NotificationRepository } from "../modules/notification/notification.repository";
 import { NotificationService } from "../modules/notification/notification.service";
 import { NotificationController } from "../modules/notification/notification.controller";
+import { UserAddressRepository } from "../modules/address/address.repository";
+import { UserAddressService } from "../modules/address/address.service";
+import { UserAddressController } from "../modules/address/address.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
 import { VNPayAdapter } from "../modules/payment/adapters/vnpay.adapter";
 
@@ -112,6 +115,14 @@ export interface ICradle {
   notificationRepository: NotificationRepository;
   notificationService: NotificationService;
   notificationController: NotificationController;
+  // User addresses (buyer-side)
+  userAddressRepository: UserAddressRepository;
+  userAddressService: UserAddressService;
+  userAddressController: UserAddressController;
+  // Aliases for Awilix CLASSIC param-name resolution
+  addressRepository: UserAddressRepository;
+  addressService: UserAddressService;
+  addressController: UserAddressController;
 }
 
 const container = createContainer<ICradle>({
@@ -153,6 +164,8 @@ container.register({
   // Awilix CLASSIC mode resolves constructor params by name, so we
   // expose the same `NotificationService` under both keys.
   notifications: asClass(NotificationService).scoped(),
+  // Aliased for `OrderService`'s `userAddresses` constructor parameter.
+  userAddresses: asClass(UserAddressService).scoped(),
   // Payment
   paymentRepository: asClass(PaymentRepository).scoped(),
   paymentService: asClass(PaymentService).scoped(),
@@ -172,6 +185,18 @@ container.register({
   notificationRepository: asClass(NotificationRepository).scoped(),
   notificationService: asClass(NotificationService).scoped(),
   notificationController: asClass(NotificationController).scoped(),
+  // User addresses (buyer-side)
+  // The concrete names (`userAddressRepository`, `userAddressService`,
+  // `userAddressController`) satisfy the `ICradle` interface.
+  // We ALSO register aliases that match the actual constructor parameter
+  // names of the injected classes (`addressRepository`, `addressService`,
+  // `addressController`) so Awilix CLASSIC resolution works for all callers.
+  userAddressRepository: asClass(UserAddressRepository).scoped(),
+  addressRepository: asClass(UserAddressRepository).scoped(),
+  userAddressService: asClass(UserAddressService).scoped(),
+  addressService: asClass(UserAddressService).scoped(),
+  userAddressController: asClass(UserAddressController).scoped(),
+  addressController: asClass(UserAddressController).scoped(),
 });
 
 export { container };

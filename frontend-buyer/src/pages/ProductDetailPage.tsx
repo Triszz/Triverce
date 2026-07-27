@@ -18,6 +18,7 @@ import {
   pickHeroImage,
   type ProductVariant,
 } from '@/services/productService';
+import { useAuthStore } from '@/stores/useAuthStore';
 import {
   VariantPicker,
   StockBadge,
@@ -53,6 +54,10 @@ export function ProductDetailPage() {
 
   // Cart hook — gives us `addItem` + `isAdding` loading flag.
   const { addItem, isAdding } = useCart();
+  // Auth state — used to guard the add-to-cart flow before attempting
+  // any network call so unauthenticated users don't see a spurious
+  // success toast when the server rejects the guest request.
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   // Drawer control — open the slide-over on a successful add.
   const openCartDrawer = useUiStore((s) => s.openCartDrawer);
 
@@ -180,6 +185,19 @@ export function ProductDetailPage() {
 
   const handleAddToCart = async () => {
     if (!selectedVariant) return;
+
+    // Guard: unauthenticated users must log in before they can add to
+    // cart. This check runs BEFORE the API call so the success toast
+    // never fires for a failed add. The guard is duplicated here rather
+    // than relying on `useCart.addItem`'s own guard because this
+    // handler needs an immediate early return to prevent the
+    // `openCartDrawer()` call below.
+    if (!isAuthenticated) {
+      toast.error('Please log in to use the cart');
+      navigate('/auth/login', { replace: true });
+      return;
+    }
+
     try {
       await addItem({ variantId: selectedVariant.id, quantity });
       toast.success(
