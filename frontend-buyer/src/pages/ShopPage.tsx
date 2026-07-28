@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { SearchX, RotateCcw } from 'lucide-react';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { categoryService } from '@/services/categoryService';
 import { productService } from '@/services/productService';
 import { ProductFilters } from '@/features/catalog/components/ProductFilters';
@@ -60,6 +61,11 @@ export function ShopPage() {
         description="Browse products from independent sellers. Filter by category, price, and more."
       />
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      <Breadcrumbs
+        crumbs={[{ label: 'Home', path: '/' }, { label: 'Shop' }]}
+        className="mb-6"
+      />
+
       <header className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
           Shop all products

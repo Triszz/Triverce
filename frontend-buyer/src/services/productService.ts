@@ -24,6 +24,8 @@ export interface ProductSummary {
   sellerId: string;
   /** Optional — populated by the backend only when the row has a category. */
   categoryId: string | null;
+  /** Populated via `include: { category: { select: { id: true, name: true } } }` on the backend. */
+  category?: { id: string; name: string } | null;
   name: string;
   slug: string;
   basePrice: number;

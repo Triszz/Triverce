@@ -140,7 +140,7 @@ export function SlideOver({
             aria-label="Close"
             className={cn(
               'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-lg',
-              'text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors',
+              'text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
             )}
           >

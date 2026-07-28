@@ -109,7 +109,7 @@ export function ProductFilters({
                     setSearchDraft('');
                     update({ search: '' });
                   }}
-                  className="text-slate-400 hover:text-slate-700 transition-colors"
+                  className="text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                   aria-label="Clear search"
                 >
                   <X size={14} aria-hidden />
@@ -243,7 +243,7 @@ function CategoryPill({
       aria-checked={active}
       onClick={onClick}
       className={cn(
-        'rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-150',
+        'rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-150 cursor-pointer',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
         active
           ? 'bg-[#002b5b] text-white shadow-sm hover:bg-[#001f3f]'

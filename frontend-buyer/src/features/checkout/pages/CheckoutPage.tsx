@@ -253,7 +253,7 @@ export function CheckoutPage() {
             <button
               type="button"
               onClick={() => navigate('/cart')}
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-2"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-2 cursor-pointer"
             >
               <ChevronLeft size={12} aria-hidden />
               Back to cart
@@ -266,7 +266,7 @@ export function CheckoutPage() {
           <button
             type="button"
             onClick={openCartDrawer}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 h-10 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 h-10 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <ShoppingBag size={14} aria-hidden />
             View cart

@@ -55,76 +55,76 @@ export function HomePage() {
       />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
 
-        {/* Hero */}
-        <Hero />
+      {/* Hero */}
+      <Hero />
 
-        {/* Trending products */}
-        <section
-          aria-labelledby="trending-heading"
-          className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
-        >
-          <SectionHeader
-            title="Trending Now"
-            subtitle="Most popular this week."
-            linkTo="/shop?sort=price_desc"
-            linkLabel="See all"
-            icon={<Flame size={18} className="text-orange-500" aria-hidden />}
-          />
-          <div className="mt-6">
-            {trendingQuery.isLoading ? (
-              <TrendingSkeleton />
-            ) : (
-              <ProductCarousel
-                products={trendingQuery.data?.data ?? []}
-                empty={
-                  <EmptyState
-                    tone="neutral"
-                    size="sm"
-                    icon={<Star size={20} aria-hidden />}
-                    title="No trending products yet"
-                    description="Check back soon — our sellers are adding new items every day."
-                    actions={[
-                      {
-                        label: 'Browse all',
-                        href: '/shop',
-                        variant: 'primary',
-                        leftIcon: <ArrowRight size={14} aria-hidden />,
-                      },
-                    ]}
-                  />
-                }
-              />
-            )}
-          </div>
-        </section>
+      {/* Categories */}
+      <section
+        aria-labelledby="categories-heading"
+        className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
+      >
+        <SectionHeader
+          title="Shop by category"
+          subtitle="Find what you need, faster."
+          linkTo="/shop"
+          linkLabel="See all products"
+        />
+        <div className="mt-6">
+          {categoriesQuery.isLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full" />
+              ))}
+            </div>
+          ) : categoriesQuery.isError ? (
+            <ErrorMessage
+              message="Couldn't load categories. Please refresh."
+            />
+          ) : (
+            <CategoriesRow categories={categoriesQuery.data?.data ?? []} />
+          )}
+        </div>
+      </section>
 
-        {/* Categories */}
-        <section
-          aria-labelledby="categories-heading"
-          className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
-        >
-          <SectionHeader
-            title="Shop by category"
-            subtitle="Find what you need, faster."
-            linkTo="/shop"
-            linkLabel="See all products"
-          />
-          <div className="mt-6">
-            {categoriesQuery.isLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-24 w-full" />
-                ))}
-              </div>
-            ) : categoriesQuery.isError ? (
-              <ErrorMessage
-                message="Couldn't load categories. Please refresh."
-              />
-            ) : (
-              <CategoriesRow categories={categoriesQuery.data?.data ?? []} />
-            )}
-          </div>
-        </section>
+      {/* Trending products */}
+      <section
+        aria-labelledby="trending-heading"
+        className="bg-white/60 border border-slate-100 rounded-2xl px-5 py-4 lg:px-7 lg:py-5 shadow-sm"
+      >
+        <SectionHeader
+          title="Trending Now"
+          subtitle="Most popular this week."
+          linkTo="/shop?sort=price_desc"
+          linkLabel="See all"
+          icon={<Flame size={18} className="text-orange-500" aria-hidden />}
+        />
+        <div className="mt-6">
+          {trendingQuery.isLoading ? (
+            <TrendingSkeleton />
+          ) : (
+            <ProductCarousel
+              products={trendingQuery.data?.data ?? []}
+              empty={
+                <EmptyState
+                  tone="neutral"
+                  size="sm"
+                  icon={<Star size={20} aria-hidden />}
+                  title="No trending products yet"
+                  description="Check back soon — our sellers are adding new items every day."
+                  actions={[
+                    {
+                      label: 'Browse all',
+                      href: '/shop',
+                      variant: 'primary',
+                      leftIcon: <ArrowRight size={14} aria-hidden />,
+                    },
+                  ]}
+                />
+              }
+            />
+          )}
+        </div>
+      </section>
 
         {/* New arrivals */}
         <section
@@ -178,24 +178,24 @@ function Hero() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#002b5b] via-[#001f3f] to-[#001540] px-6 sm:px-10 lg:px-12 py-12 sm:py-16">
-      <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-12 items-center">
+    <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#002b5b] via-[#001f3f] to-[#001540] px-6 sm:px-10 lg:px-12 py-10 sm:py-12">
+      <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10 items-center">
         {/* Left column: text + CTAs */}
-        <div className="relative max-w-xl space-y-4">
+        <div className="relative max-w-xl space-y-3">
           <p className="text-xs sm:text-sm font-medium uppercase tracking-[0.18em] text-blue-100">
             Premium multi-vendor marketplace
           </p>
-          <h1 className="text-3xl sm:text-5xl font-bold leading-tight tracking-tight text-white">
+          <h1 className="text-2xl sm:text-4xl font-bold leading-snug tracking-tight text-white">
             Shop curated essentials from independent sellers worldwide.
           </h1>
           <p className="text-sm sm:text-base text-blue-100 leading-relaxed">
             Audio gear, apparel, and accessories — handpicked, fairly priced,
             delivered to your door.
           </p>
-          <div className="pt-2 flex flex-wrap gap-3">
+          <div className="pt-1 flex flex-wrap gap-3">
             <Link
               to="/shop"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white text-[#002b5b] font-medium text-sm px-5 py-2.5 hover:bg-brand-50 transition-colors shadow-sm hover:shadow-md"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white text-[#002b5b] font-medium text-sm px-5 py-2.5 hover:bg-brand-50 transition-colors shadow-sm hover:shadow-md cursor-pointer"
             >
               Browse all products
               <ArrowRight size={16} aria-hidden />
@@ -204,7 +204,7 @@ function Hero() {
             {isAuthenticated ? (
               <Link
                 to="/orders"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 text-white font-medium text-sm px-5 py-2.5 hover:bg-white/10 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 text-white font-medium text-sm px-5 py-2.5 hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <ShoppingBag size={16} aria-hidden />
                 View my orders
@@ -212,7 +212,7 @@ function Hero() {
             ) : (
               <Link
                 to="/auth/register"
-                className="inline-flex items-center rounded-lg border border-white/30 text-white font-medium text-sm px-5 py-2.5 hover:bg-white/10 transition-colors"
+                className="inline-flex items-center rounded-lg border border-white/30 text-white font-medium text-sm px-5 py-2.5 hover:bg-white/10 transition-colors cursor-pointer"
               >
                 Create an account
               </Link>
@@ -226,11 +226,11 @@ function Hero() {
 
       <div
         aria-hidden
-        className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-brand-400/20 blur-3xl pointer-events-none"
+        className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-brand-400/20 blur-3xl pointer-events-none"
       />
       <div
         aria-hidden
-        className="absolute -bottom-32 -right-10 h-72 w-72 rounded-full bg-info-500/20 blur-3xl pointer-events-none"
+        className="absolute -bottom-20 -right-6 h-56 w-56 rounded-full bg-info-500/20 blur-3xl pointer-events-none"
       />
     </section>
   );
@@ -253,7 +253,7 @@ function Hero() {
 
 function HeroGraphic() {
   return (
-    <div className="relative hidden lg:flex justify-center items-center min-h-[420px] xl:min-h-[460px]">
+    <div className="relative hidden lg:flex justify-center items-center min-h-[260px] xl:min-h-[300px]">
       <span className="sr-only">
         A miniature preview of the Triverce marketplace: a search bar,
         category filters, and two product cards in a glass window.
@@ -381,7 +381,7 @@ function SectionHeader({
       {linkTo && linkLabel && (
         <Link
           to={linkTo}
-          className="inline-flex items-center gap-1 text-sm font-medium text-[#002b5b] hover:text-[#001f3f] transition-colors"
+          className="inline-flex items-center gap-1 text-sm font-medium text-[#002b5b] hover:text-[#001f3f] transition-colors cursor-pointer"
         >
           {linkLabel}
           <ArrowRight size={14} aria-hidden />
@@ -396,13 +396,46 @@ function SectionHeader({
  * ──────────────────────────────────────────────────────────────────────── */
 
 const CATEGORY_GRADIENTS = [
-  'from-brand-50 to-brand-100',
-  'from-success-50 to-success-100',
-  'from-warning-50 to-warning-100',
-  'from-info-50 to-info-100',
-  'from-danger-50 to-danger-100',
+  'from-blue-50 to-blue-100',
+  'from-emerald-50 to-emerald-100',
+  'from-amber-50 to-amber-100',
+  'from-purple-50 to-purple-100',
+  'from-rose-50 to-rose-100',
   'from-slate-100 to-slate-200',
 ];
+
+/** Pick a Lucide icon key by searching category name keywords. */
+function CategoryIcon({ name }: { name: string }) {
+  const n = name.trim();
+  const iconMap: Record<string, React.ReactNode> = {
+    Electronics: <PackageSearch size={22} className="text-blue-600" aria-hidden />,
+    Clothing: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-emerald-600" aria-hidden>
+        <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z" />
+      </svg>
+    ),
+    Accessories: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-amber-600" aria-hidden>
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+        <line x1={3} y1={6} x2={21} y2={6} />
+        <path d="M16 10a4 4 0 0 1-8 0" />
+      </svg>
+    ),
+    'Home & Living': (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-purple-600" aria-hidden>
+        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <polyline points="9 22 9 12 15 12 15 22" />
+      </svg>
+    ),
+  };
+  if (n in iconMap) return iconMap[n];
+  if (/electronic|tech|computer|phone|gadget/i.test(n)) return <PackageSearch size={22} className="text-blue-600" aria-hidden />;
+  if (/clothing|apparel|fashion|shirt|dress|shoe/i.test(n)) return <PackageSearch size={22} className="text-emerald-600" aria-hidden />;
+  if (/home|furniture|decor|kitchen|garden/i.test(n)) return <PackageSearch size={22} className="text-purple-600" aria-hidden />;
+  if (/beauty|cosmetic|skin|makeup/i.test(n)) return <PackageSearch size={22} className="text-rose-500" aria-hidden />;
+  if (/food|grocery|drink|pet|toy|book|sport/i.test(n)) return <PackageSearch size={22} className="text-amber-600" aria-hidden />;
+  return <PackageSearch size={22} className="text-slate-500" aria-hidden />;
+}
 
 function CategoriesRow({ categories }: { categories: Category[] }) {
   if (categories.length === 0) {
@@ -425,26 +458,31 @@ function CategoriesRow({ categories }: { categories: Category[] }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {categories.map((cat, i) => (
         <Link
           key={cat.id}
           to={`/shop?category=${cat.id}`}
           className={cn(
-            'group flex flex-col items-start justify-between h-24 rounded-xl p-4',
+            'group flex flex-col gap-3 h-28 rounded-xl p-4',
             'bg-gradient-to-br',
             CATEGORY_GRADIENTS[i % CATEGORY_GRADIENTS.length],
-            'transition-all duration-200 hover:shadow-md hover:-translate-y-0.5',
+            'border border-slate-200/50',
+            'transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-transparent',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
+            'cursor-pointer',
           )}
         >
-          <span className="text-base font-semibold text-slate-900 group-hover:text-[#002b5b] transition-colors line-clamp-1">
+          <span className="shrink-0">
+            <CategoryIcon name={cat.name} />
+          </span>
+          <span className="text-sm font-semibold text-slate-900 group-hover:text-[#002b5b] transition-colors line-clamp-1 leading-tight">
             {cat.name}
           </span>
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600">
-            Shop now
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+            Browse
             <ArrowRight
-              size={12}
+              size={10}
               aria-hidden
               className="transition-transform group-hover:translate-x-0.5"
             />

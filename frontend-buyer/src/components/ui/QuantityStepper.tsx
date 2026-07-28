@@ -98,7 +98,7 @@ export function QuantityStepper({
         onClick={dec}
         aria-label="Decrease quantity"
         disabled={disabled || display <= 1}
-        className="h-8 w-8 inline-flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
+        className="h-8 w-8 inline-flex items-center justify-center text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
       >
         <Minus size={14} aria-hidden />
       </button>
@@ -130,7 +130,7 @@ export function QuantityStepper({
         onClick={inc}
         aria-label="Increase quantity"
         disabled={disabled || display >= max}
-        className="h-8 w-8 inline-flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
+        className="h-8 w-8 inline-flex items-center justify-center text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
       >
         <Plus size={14} aria-hidden />
       </button>

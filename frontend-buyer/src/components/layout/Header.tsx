@@ -119,7 +119,7 @@ function Header() {
               type="button"
               onClick={openCartDrawer}
               aria-label={`Open cart (${totalItems} ${totalItems === 1 ? 'item' : 'items'})`}
-              className="relative text-slate-600 hover:text-[#002b5b] transition-colors p-2 rounded-lg hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b]"
+              className="relative text-slate-600 hover:text-[#002b5b] transition-colors p-2 rounded-lg hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] cursor-pointer"
             >
               <ShoppingCart size={20} aria-hidden />
               {/* Cart badge — only rendered when cart has items */}

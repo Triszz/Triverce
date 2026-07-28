@@ -155,23 +155,39 @@ export class ProductRepository {
   async findById(id: string): Promise<ProductEntity | null> {
     const row = await this.prisma.product.findFirst({
       where: { id, deletedAt: null },
-      include: { seller: { select: { storeName: true } } },
+      include: {
+        seller: { select: { storeName: true } },
+        category: { select: { id: true, name: true } },
+      },
     });
     if (!row) return null;
 
     const variants = await this.loadVariantsWithAttributes(id);
-    return ProductEntity.fromDatabase(row, variants, row.seller?.storeName ?? null);
+    return ProductEntity.fromDatabase(
+      row,
+      variants,
+      row.seller?.storeName ?? null,
+      row.category ?? null,
+    );
   }
 
   async findBySlug(slug: string): Promise<ProductEntity | null> {
     const row = await this.prisma.product.findFirst({
       where: { slug, deletedAt: null },
-      include: { seller: { select: { storeName: true } } },
+      include: {
+        seller: { select: { storeName: true } },
+        category: { select: { id: true, name: true } },
+      },
     });
     if (!row) return null;
 
     const variants = await this.loadVariantsWithAttributes(row.id);
-    return ProductEntity.fromDatabase(row, variants, row.seller?.storeName ?? null);
+    return ProductEntity.fromDatabase(
+      row,
+      variants,
+      row.seller?.storeName ?? null,
+      row.category ?? null,
+    );
   }
 
   async create(dto: CreateProductDto, sellerId: string): Promise<ProductEntity> {
@@ -286,10 +302,18 @@ export class ProductRepository {
       const row = await this.prisma.product.update({
         where: { id },
         data: updateData,
-        include: { seller: { select: { storeName: true } } },
+        include: {
+          seller: { select: { storeName: true } },
+          category: { select: { id: true, name: true } },
+        },
       });
       const variants = await this.loadVariantsWithAttributes(id);
-      return ProductEntity.fromDatabase(row, variants, row.seller?.storeName ?? null);
+      return ProductEntity.fromDatabase(
+        row,
+        variants,
+        row.seller?.storeName ?? null,
+        row.category ?? null,
+      );
     } catch {
       return null;
     }

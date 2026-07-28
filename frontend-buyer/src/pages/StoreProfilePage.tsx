@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Package } from 'lucide-react';
 import { PageMeta } from '@/components/common/PageMeta';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -70,6 +71,14 @@ export function StoreProfilePage() {
             ? `${displayName} — ${store.description}`
             : `Browse all products from ${displayName}.`
         }
+      />
+
+      <Breadcrumbs
+        crumbs={[
+          { label: 'Home', path: '/' },
+          { label: displayName },
+        ]}
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8"
       />
 
       {/* ── Hero / Cover Banner ──────────────────────────────────────── */}

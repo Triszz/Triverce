@@ -16,6 +16,8 @@ export class ProductEntity {
     public readonly variants: ReadonlyArray<import("./product-variant.entity").ProductVariantEntity> = [],
     /** Populated at query time via Prisma `include: { seller: { select: { storeName: true } } }`. */
     public readonly storeName: string | null = null,
+    /** Populated at query time via Prisma `include: { category: { select: { id: true, name: true } } }`. */
+    public readonly category: { id: string; name: string } | null = null,
   ) {
     if (basePrice < 0) {
       throw new Error("Product base price cannot be negative");
@@ -106,6 +108,7 @@ export class ProductEntity {
     row: Product,
     variants: import("./product-variant.entity").ProductVariantEntity[] = [],
     storeName: string | null = null,
+    category: { id: string; name: string } | null = null,
   ): ProductEntity {
     return new ProductEntity(
       row.id,
@@ -127,6 +130,7 @@ export class ProductEntity {
       row.updatedAt,
       variants,
       storeName,
+      category,
     );
   }
 
@@ -135,6 +139,7 @@ export class ProductEntity {
       id: this.id,
       sellerId: this.sellerId,
       categoryId: this.categoryId,
+      category: this.category ?? undefined,
       name: this.name,
       slug: this.slug,
       basePrice: this.basePrice,
@@ -156,6 +161,7 @@ export class ProductEntity {
       id: this.id,
       sellerId: this.sellerId,
       categoryId: this.categoryId,
+      category: this.category ?? undefined,
       name: this.name,
       slug: this.slug,
       description: this.description,

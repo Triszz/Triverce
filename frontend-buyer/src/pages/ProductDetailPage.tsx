@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ChevronLeft,
   Package,
   ShoppingBag,
   Store,
@@ -10,6 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
@@ -229,15 +229,23 @@ export function ProductDetailPage() {
         description={product.description ?? `View ${product.name} on Triverce.`}
       />
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-      {/* Back link */}
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-[#002b5b] transition-colors mb-6"
-      >
-        <ChevronLeft size={16} aria-hidden />
-        Back
-      </button>
+      <Breadcrumbs
+        crumbs={
+          product.category
+            ? [
+                { label: 'Home', path: '/' },
+                { label: 'Shop', path: '/shop' },
+                { label: product.category.name, path: `/shop?category=${product.category.id}` },
+                { label: product.name },
+              ]
+            : [
+                { label: 'Home', path: '/' },
+                { label: 'Shop', path: '/shop' },
+                { label: product.name },
+              ]
+        }
+        className="mb-6"
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
         {/* Image column — main gallery hero + thumbnail strip */}
