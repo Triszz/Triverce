@@ -16,6 +16,9 @@ export interface PublicStoreProfile {
   storeName: string | null;
   logoUrl: string | null;
   description: string | null;
+  supportEmail: string | null;
+  phone: string | null;
+  address: string | null;
   joinedAt: Date;
   productCount: number;
 }

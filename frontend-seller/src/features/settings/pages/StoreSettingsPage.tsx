@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useForm, useFormState } from "react-hook-form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import {
   Camera,
@@ -13,13 +14,16 @@ import {
 import { useSellerProfile } from "../hooks/useSellerProfile";
 import { useUpdateSellerProfile, uploadLogo } from "../hooks/useUpdateSellerProfile";
 import { validateImageFile } from "@/lib/imageValidation";
-import type { StoreProfile } from "../types/seller-profile";
+import {
+  storeProfileSchema,
+  type StoreProfileFormValues,
+} from "../types/seller-profile.schema";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Types
  * ────────────────────────────────────────────────────────────────────────── */
 
-type FormValues = StoreProfile;
+type FormValues = StoreProfileFormValues;
 
 interface LogoUploadState {
   preview: string; // current display URL
@@ -282,10 +286,10 @@ export function StoreSettingsPage() {
     handleSubmit,
     reset,
     setValue,
-    watch,
-    control,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isValid },
   } = useForm<FormValues>({
+    resolver: zodResolver(storeProfileSchema),
+    mode: "onBlur",
     defaultValues: {
       storeName: "",
       description: "",
@@ -295,8 +299,6 @@ export function StoreSettingsPage() {
       address: "",
     },
   });
-
-  const { errors: formErrors } = useFormState({ control });
 
   // Sync form defaults when the profile query resolves.
   // useEffect avoids overwriting user edits on re-renders.
@@ -351,7 +353,7 @@ export function StoreSettingsPage() {
   if (isLoading) return <PageSkeleton />;
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Page header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Store Settings</h1>
@@ -383,7 +385,7 @@ export function StoreSettingsPage() {
             </h2>
           </div>
 
-          {/* Logo + Store name side-by-side */}
+          {/* Logo + Store name on one row */}
           <div className="flex flex-col sm:flex-row gap-6 sm:items-start">
             {/* Logo upload — centered above the name field on mobile */}
             <LogoUpload
@@ -395,16 +397,16 @@ export function StoreSettingsPage() {
             />
 
             {/* Text fields */}
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-4 max-w-2xl">
               <Field
                 label="Store Name"
-                error={formErrors.storeName?.message}
+                error={errors.storeName?.message}
                 required
               >
                 <input
                   type="text"
                   placeholder="e.g. Ngọc Minh Tech Store"
-                  maxLength={100}
+                  maxLength={50}
                   disabled={isSaving}
                   className={`
                     w-full h-10 px-3 rounded-lg border text-sm text-slate-900
@@ -414,44 +416,34 @@ export function StoreSettingsPage() {
                     transition-colors duration-150
                     ${errors.storeName ? "border-red-400" : "border-slate-200"}
                   `}
-                  {...register("storeName", {
-                    required: "Store name is required",
-                    maxLength: {
-                      value: 100,
-                      message: "Store name must be 100 characters or fewer",
-                    },
-                  })}
-                />
-              </Field>
-
-              <Field
-                label="Description"
-                hint="Appears on your public storefront page"
-                error={formErrors.description?.message}
-              >
-                <textarea
-                  rows={4}
-                  placeholder="Tell customers what makes your store special..."
-                  maxLength={1000}
-                  disabled={isSaving}
-                  className={`
-                    w-full px-3 py-2 rounded-lg border text-sm text-slate-900
-                    placeholder:text-slate-300 bg-white resize-none
-                    focus:outline-none focus:ring-2 focus:ring-[#002b5b]/30 focus:border-[#002b5b]
-                    disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed
-                    transition-colors duration-150
-                    ${errors.description ? "border-red-400" : "border-slate-200"}
-                  `}
-                  {...register("description", {
-                    maxLength: {
-                      value: 1000,
-                      message: "Description must be 1000 characters or fewer",
-                    },
-                  })}
+                  {...register("storeName")}
                 />
               </Field>
             </div>
           </div>
+
+          {/* Description — full width below logo/name row */}
+          <Field
+            label="Description"
+            hint="Appears on your public storefront page"
+            error={errors.description?.message}
+          >
+            <textarea
+              rows={4}
+              placeholder="Tell customers what makes your store special..."
+              maxLength={500}
+              disabled={isSaving}
+              className={`
+                w-full px-3 py-2 rounded-lg border text-sm text-slate-900
+                placeholder:text-slate-300 bg-white resize-none
+                focus:outline-none focus:ring-2 focus:ring-[#002b5b]/30 focus:border-[#002b5b]
+                disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed
+                transition-colors duration-150
+                ${errors.description ? "border-red-400" : "border-slate-200"}
+              `}
+              {...register("description")}
+            />
+          </Field>
         </section>
 
         {/* ── Section 2: Contact Information ─────────────────────────── */}
@@ -464,11 +456,11 @@ export function StoreSettingsPage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field
               label="Support Email"
               hint="Customers will see this for support inquiries"
-              error={formErrors.supportEmail?.message}
+                error={errors.supportEmail?.message}
             >
               <input
                 type="email"
@@ -482,19 +474,14 @@ export function StoreSettingsPage() {
                   transition-colors duration-150
                   ${errors.supportEmail ? "border-red-400" : "border-slate-200"}
                 `}
-                {...register("supportEmail", {
-                  pattern: {
-                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                    message: "Enter a valid email address",
-                  },
-                })}
+                {...register("supportEmail")}
               />
             </Field>
 
             <Field
               label="Phone Number"
               hint="Shown on your storefront for urgent contact"
-              error={formErrors.phone?.message}
+                error={errors.phone?.message}
             >
               <input
                 type="tel"
@@ -509,42 +496,34 @@ export function StoreSettingsPage() {
                   transition-colors duration-150
                   ${errors.phone ? "border-red-400" : "border-slate-200"}
                 `}
-                {...register("phone", {
-                  maxLength: {
-                    value: 20,
-                    message: "Phone number must be 20 characters or fewer",
-                  },
-                })}
+                {...register("phone")}
               />
             </Field>
           </div>
 
-          <Field
-            label="Business Address"
-            hint="Displayed on invoices and your storefront"
-            error={formErrors.address?.message}
-          >
-            <textarea
-              rows={3}
-              placeholder="123 Đường ABC, Phường XYZ, Quận 1, TP. Hồ Chí Minh"
-              maxLength={500}
-              disabled={isSaving}
-              className={`
-                w-full px-3 py-2 rounded-lg border text-sm text-slate-900
-                placeholder:text-slate-300 bg-white resize-none
-                focus:outline-none focus:ring-2 focus:ring-[#002b5b]/30 focus:border-[#002b5b]
-                disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed
-                transition-colors duration-150
-                ${errors.address ? "border-red-400" : "border-slate-200"}
-              `}
-              {...register("address", {
-                maxLength: {
-                  value: 500,
-                  message: "Address must be 500 characters or fewer",
-                },
-              })}
-            />
-          </Field>
+          <div className="md:col-span-2">
+            <Field
+              label="Business Address"
+              hint="Displayed on invoices and your storefront"
+              error={errors.address?.message}
+            >
+              <textarea
+                rows={3}
+                placeholder="123 Đường ABC, Phường XYZ, Quận 1, TP. Hồ Chí Minh"
+                maxLength={500}
+                disabled={isSaving}
+                className={`
+                  w-full px-3 py-2 rounded-lg border text-sm text-slate-900
+                  placeholder:text-slate-300 bg-white resize-none
+                  focus:outline-none focus:ring-2 focus:ring-[#002b5b]/30 focus:border-[#002b5b]
+                  disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed
+                  transition-colors duration-150
+                  ${errors.address ? "border-red-400" : "border-slate-200"}
+                `}
+                {...register("address")}
+              />
+            </Field>
+          </div>
         </section>
 
         {/* ── Actions ─────────────────────────────────────────────────── */}
@@ -579,7 +558,7 @@ export function StoreSettingsPage() {
             {/* Save — strictly disabled unless dirty or saving */}
             <button
               type="submit"
-              disabled={(!isDirty && !isSaving) || isSaving}
+              disabled={(!isDirty || !isValid) && !isSaving}
               className={`
                 h-10 px-6 rounded-lg text-sm font-semibold flex items-center gap-2
                 transition-all duration-150

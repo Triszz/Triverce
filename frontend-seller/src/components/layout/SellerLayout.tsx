@@ -70,7 +70,7 @@ export function SellerLayout() {
   return (
     <div className="min-h-screen flex bg-slate-50">
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 bg-[#031140] flex flex-col">
+      <aside className="fixed inset-y-0 left-0 w-64 shrink-0 bg-[#031140] flex flex-col z-10">
         {/* Brand */}
         <Link to="/" className="h-16 flex items-center gap-2 px-6">
           <span className="w-9 h-9 rounded-lg bg-white/10 text-white flex items-center justify-center">
@@ -83,7 +83,7 @@ export function SellerLayout() {
         </Link>
 
         {/* Nav links */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
@@ -107,8 +107,8 @@ export function SellerLayout() {
           })}
         </nav>
 
-        {/* Logout — pinned to bottom */}
-        <div className="p-3 border-t border-white/10">
+        {/* Logout — pinned to bottom via mt-auto on parent wrapper */}
+        <div className="mt-auto p-3 border-t border-white/10">
           <button
             type="button"
             onClick={handleLogout}
@@ -122,7 +122,7 @@ export function SellerLayout() {
       </aside>
 
       {/* ── Main column ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="ml-64 flex-1 flex flex-col min-w-0">
         {/* Top header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
           <div>

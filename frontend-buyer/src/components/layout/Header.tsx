@@ -1,5 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import {
+  Link,
+  NavLink,
+  useNavigate,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import { User, Package, LogOut, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "../common/Logo";
@@ -11,6 +17,8 @@ import { cn } from "@/lib/cn";
 
 function Header() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, user, clearAuth } = useAuthStore();
   const openCartDrawer = useUiStore((s) => s.openCartDrawer);
   const { totalItems } = useCart();
@@ -18,10 +26,32 @@ function Header() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Context-aware: when browsing a store, the global header should search
+  // *inside* that store rather than the global catalog.
+  const isStorePage = location.pathname.startsWith("/store/");
+
+  // Mirror the URL `?q=` into the input so that external mutations
+  // (clearing the search on the store page, navigating via the back
+  // button, or pasting a URL) stay in sync with the visible field.
+  // On non-store pages the URL `q` belongs to `/shop`, which is a
+  // destination — not a source — so we don't read from it there.
+  useEffect(() => {
+    if (isStorePage) {
+      setSearchQuery(searchParams.get("q") ?? "");
+    } else {
+      setSearchQuery("");
+    }
+  }, [isStorePage, searchParams]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/shop?q=${encodeURIComponent(searchQuery.trim())}`);
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    const encoded = encodeURIComponent(trimmed);
+    if (isStorePage) {
+      navigate(`${location.pathname}?q=${encoded}`);
+    } else {
+      navigate(`/shop?q=${encoded}`);
     }
   };
 
@@ -73,7 +103,11 @@ function Header() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products, brands, or sellers..."
+                placeholder={
+                  isStorePage
+                    ? "Search in this shop..."
+                    : "Search products, brands, or sellers..."
+                }
                 className="w-full rounded-full border border-slate-200 bg-slate-50 px-5 py-2.5 pr-12 text-sm text-slate-900 placeholder-slate-400 focus:border-[#002b5b] focus:outline-none focus:ring-2 focus:ring-[#002b5b]/20 transition-colors"
               />
               <button

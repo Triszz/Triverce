@@ -11,6 +11,9 @@ export interface StoreProfile {
   storeName: string | null;
   logoUrl: string | null;
   description: string | null;
+  supportEmail: string | null;
+  phone: string | null;
+  address: string | null;
   joinedAt: string;   // ISO date string — derived from the seller's createdAt
   productCount: number; // count of active products for this seller
 }

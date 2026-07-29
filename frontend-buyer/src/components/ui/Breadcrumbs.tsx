@@ -9,6 +9,8 @@ export interface Crumb {
 export interface BreadcrumbsProps {
   crumbs: Crumb[];
   className?: string;
+  /** 'light' renders on dark backgrounds (e.g. inside a navy hero banner). Defaults to 'dark'. */
+  theme?: 'light' | 'dark';
 }
 
 /**
@@ -16,15 +18,23 @@ export interface BreadcrumbsProps {
  *
  * Usage:
  *   <Breadcrumbs crumbs={[{ label: 'Home', path: '/' }, { label: 'Shop', path: '/shop' }, { label: product.name }]} />
+ *   <Breadcrumbs crumbs={[{ label: 'Home', path: '/' }, { label: displayName }]} theme="light" />
  *
  * - All items except the last (current page) are clickable links.
  * - The last item is rendered as plain text in a darker tone.
+ * - `theme="light"` switches to pale colours suitable for dark backgrounds.
  */
-export function Breadcrumbs({ crumbs, className }: BreadcrumbsProps) {
+export function Breadcrumbs({ crumbs, className, theme = 'dark' }: BreadcrumbsProps) {
+  const isLight = theme === 'light';
+
   return (
     <nav
       aria-label="Breadcrumb"
-      className={cn('flex items-center gap-1.5 text-sm text-slate-500 flex-wrap', className)}
+      className={cn(
+        'flex items-center gap-1.5 text-sm flex-wrap',
+        isLight ? 'text-slate-300' : 'text-slate-500',
+        className,
+      )}
     >
       <ol className="flex items-center gap-1.5 flex-wrap">
         {crumbs.map((crumb, index) => {
@@ -33,7 +43,7 @@ export function Breadcrumbs({ crumbs, className }: BreadcrumbsProps) {
           return (
             <li key={index} className="flex items-center gap-1.5">
               {index > 0 && (
-                <span aria-hidden className="text-slate-300 select-none">
+                <span aria-hidden className={cn(isLight ? 'text-slate-500' : 'text-slate-300', 'select-none')}>
                   /
                 </span>
               )}
@@ -41,8 +51,12 @@ export function Breadcrumbs({ crumbs, className }: BreadcrumbsProps) {
                 <span
                   className={cn(
                     isLast
-                      ? 'text-slate-900 font-medium cursor-default'
-                      : 'text-slate-500',
+                      ? isLight
+                        ? 'text-white font-medium cursor-default'
+                        : 'text-slate-900 font-medium cursor-default'
+                      : isLight
+                        ? 'text-slate-300'
+                        : 'text-slate-500',
                   )}
                 >
                   {crumb.label}
@@ -50,7 +64,12 @@ export function Breadcrumbs({ crumbs, className }: BreadcrumbsProps) {
               ) : (
                 <Link
                   to={crumb.path}
-                  className="hover:text-slate-900 transition-colors cursor-pointer"
+                  className={cn(
+                    'transition-colors cursor-pointer',
+                    isLight
+                      ? 'hover:text-white'
+                      : 'hover:text-slate-900',
+                  )}
                 >
                   {crumb.label}
                 </Link>

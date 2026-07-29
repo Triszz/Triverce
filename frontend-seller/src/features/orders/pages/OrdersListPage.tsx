@@ -1,21 +1,20 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Eye,
   Package,
   ShoppingBag,
-} from 'lucide-react';
-import { formatVnd } from '@/lib/format';
-import { cn } from '@/lib/cn';
-import { useOrders } from '../hooks/useOrders';
+} from "lucide-react";
+import { formatVnd } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { useOrders } from "../hooks/useOrders";
 import {
   OrderStatusBadge,
   orderStatusLabel,
-} from '../components/OrderStatusBadge';
-import type { Order, OrderStatus } from '@/types/order';
+} from "../components/OrderStatusBadge";
+import type { Order, OrderStatus } from "@/types/order";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Filter chip definitions
@@ -27,7 +26,7 @@ import type { Order, OrderStatus } from '@/types/order';
  * "All" chip shows the total returned for the current page.
  * ────────────────────────────────────────────────────────────────────────── */
 
-type StatusFilter = OrderStatus | 'all';
+type StatusFilter = OrderStatus | "all";
 
 interface FilterChip {
   value: StatusFilter;
@@ -35,13 +34,13 @@ interface FilterChip {
 }
 
 const FILTER_CHIPS: FilterChip[] = [
-  { value: 'all', label: 'All' },
-  { value: 'pending', label: orderStatusLabel('pending') },
-  { value: 'confirmed', label: orderStatusLabel('confirmed') },
-  { value: 'shipping', label: orderStatusLabel('shipping') },
-  { value: 'delivered', label: orderStatusLabel('delivered') },
-  { value: 'cancelled', label: orderStatusLabel('cancelled') },
-  { value: 'failed', label: orderStatusLabel('failed') },
+  { value: "all", label: "All" },
+  { value: "pending", label: orderStatusLabel("pending") },
+  { value: "confirmed", label: orderStatusLabel("confirmed") },
+  { value: "shipping", label: orderStatusLabel("shipping") },
+  { value: "delivered", label: orderStatusLabel("delivered") },
+  { value: "cancelled", label: orderStatusLabel("cancelled") },
+  { value: "failed", label: orderStatusLabel("failed") },
 ];
 
 /**
@@ -62,12 +61,12 @@ function shortOrderId(id: string): string {
 function formatOrderDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -80,7 +79,7 @@ export function OrdersListPage() {
 
   // Status filter — client-side only. We re-use the same query cache as
   // the underlying useOrders so the page feels instant when toggling chips.
-  const [activeFilter, setActiveFilter] = useState<StatusFilter>('all');
+  const [activeFilter, setActiveFilter] = useState<StatusFilter>("all");
 
   const { data, isLoading, isError, error, refetch, isFetching } = useOrders({
     page,
@@ -104,7 +103,7 @@ export function OrdersListPage() {
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
-    if (activeFilter === 'all') return orders;
+    if (activeFilter === "all") return orders;
     return orders.filter((o) => o.status === activeFilter);
   }, [orders, activeFilter]);
 
@@ -115,9 +114,9 @@ export function OrdersListPage() {
   if (isError || !data) {
     return (
       <ErrorState
-        message={(error as Error)?.message ?? 'Failed to load orders'}
+        message={(error as Error)?.message ?? "Failed to load orders"}
         onRetry={() => void refetch()}
-        onBack={() => navigate('/')}
+        onBack={() => navigate("/")}
       />
     );
   }
@@ -126,16 +125,10 @@ export function OrdersListPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div>
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-2 cursor-pointer"
-        >
-          <ArrowLeft size={14} aria-hidden /> Dashboard
-        </Link>
         <h1 className="text-2xl font-bold text-slate-900">Orders</h1>
         <p className="mt-1 text-sm text-slate-500">
           Track and fulfill customer orders. {total.toLocaleString()} total
-          order{total === 1 ? '' : 's'}.
+          order{total === 1 ? "" : "s"}.
         </p>
       </div>
 
@@ -148,7 +141,7 @@ export function OrdersListPage() {
           {FILTER_CHIPS.map((chip) => {
             const isActive = chip.value === activeFilter;
             const count =
-              chip.value === 'all'
+              chip.value === "all"
                 ? orders.length
                 : (statusCounts.get(chip.value as OrderStatus) ?? 0);
             return (
@@ -158,19 +151,19 @@ export function OrdersListPage() {
                 onClick={() => setActiveFilter(chip.value)}
                 aria-pressed={isActive}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors cursor-pointer',
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors cursor-pointer",
                   isActive
-                    ? 'bg-[#002b5b] text-white border-[#002b5b]'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50',
+                    ? "bg-[#002b5b] text-white border-[#002b5b]"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
                 )}
               >
                 {chip.label}
                 <span
                   className={cn(
-                    'inline-flex items-center justify-center min-w-[1.25rem] px-1 rounded-full text-[10px] font-semibold',
+                    "inline-flex items-center justify-center min-w-[1.25rem] px-1 rounded-full text-[10px] font-semibold",
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 text-slate-600',
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-600",
                   )}
                 >
                   {count}
@@ -219,8 +212,8 @@ export function OrdersListPage() {
         {total > 0 && (
           <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50 rounded-b-xl">
             <p className="text-xs text-slate-500">
-              Showing page {page} of {totalPages} ·{' '}
-              {total.toLocaleString()} order{total === 1 ? '' : 's'} total
+              Showing page {page} of {totalPages} · {total.toLocaleString()}{" "}
+              order{total === 1 ? "" : "s"} total
             </p>
             <div className="flex items-center gap-1">
               <button
@@ -256,13 +249,7 @@ export function OrdersListPage() {
  * Row component — extracted so the parent's render stays readable.
  * ────────────────────────────────────────────────────────────────────────── */
 
-function OrderRow({
-  order,
-  onOpen,
-}: {
-  order: Order;
-  onOpen: () => void;
-}) {
+function OrderRow({ order, onOpen }: { order: Order; onOpen: () => void }) {
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
@@ -280,9 +267,7 @@ function OrderRow({
         {formatOrderDate(order.createdAt)}
       </td>
       <td className="px-6 py-3">
-        <span className="font-medium text-slate-900">
-          {order.shippingName}
-        </span>
+        <span className="font-medium text-slate-900">{order.shippingName}</span>
         <span className="block text-xs text-slate-500 mt-0.5">
           {order.shippingPhone}
         </span>
@@ -345,19 +330,19 @@ function OrdersListSkeleton() {
 }
 
 function EmptyOrders({ activeFilter }: { activeFilter: StatusFilter }) {
-  const isFiltered = activeFilter !== 'all';
+  const isFiltered = activeFilter !== "all";
   return (
     <div className="px-6 py-16 text-center">
       <span className="inline-flex w-12 h-12 rounded-full bg-slate-100 items-center justify-center mb-3">
         <ShoppingBag size={20} className="text-slate-500" aria-hidden />
       </span>
       <h3 className="text-sm font-semibold text-slate-900">
-        {isFiltered ? 'No orders match this filter' : 'No orders yet'}
+        {isFiltered ? "No orders match this filter" : "No orders yet"}
       </h3>
       <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
         {isFiltered
-          ? 'Try clearing the filter to see all orders.'
-          : 'When customers place orders, they will appear here.'}
+          ? "Try clearing the filter to see all orders."
+          : "When customers place orders, they will appear here."}
       </p>
     </div>
   );
@@ -375,7 +360,11 @@ function ErrorState({
   return (
     <div className="max-w-3xl mx-auto">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-6 py-12 text-center">
-        <Package size={28} className="mx-auto text-slate-300 mb-2" aria-hidden />
+        <Package
+          size={28}
+          className="mx-auto text-slate-300 mb-2"
+          aria-hidden
+        />
         <p className="text-base font-semibold text-red-600">
           Failed to load orders
         </p>

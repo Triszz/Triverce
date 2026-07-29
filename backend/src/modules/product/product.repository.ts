@@ -57,6 +57,7 @@ export class ProductRepository {
         take: query.limit,
         include: {
           seller: { select: { storeName: true } },
+          category: { select: { id: true, name: true } },
         },
       }),
     ]);
@@ -75,6 +76,7 @@ export class ProductRepository {
           row,
           variant ? [variant] : [],
           row.seller?.storeName ?? null,
+          row.category ?? null,
         );
       }),
       total,

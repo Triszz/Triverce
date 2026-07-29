@@ -147,6 +147,9 @@ export class UserRepository {
     storeName: string | null;
     logoUrl: string | null;
     description: string | null;
+    supportEmail: string | null;
+    phone: string | null;
+    address: string | null;
     createdAt: Date;
     productCount: number;
   } | null> {
@@ -158,6 +161,9 @@ export class UserRepository {
           storeName: true,
           logoUrl: true,
           description: true,
+          supportEmail: true,
+          phone: true,
+          address: true,
           createdAt: true,
         },
       }),
@@ -172,6 +178,9 @@ export class UserRepository {
       storeName: user.storeName,
       logoUrl: user.logoUrl,
       description: user.description,
+      supportEmail: user.supportEmail,
+      phone: user.phone,
+      address: user.address,
       createdAt: user.createdAt,
       productCount,
     };
