@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { SearchX, RotateCcw } from 'lucide-react';
+import { SearchX, RotateCcw, Search } from 'lucide-react';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { categoryService } from '@/services/categoryService';
 import { productService } from '@/services/productService';
@@ -20,7 +20,13 @@ import { useCatalogFilters } from '@/features/catalog/hooks/useCatalogFilters';
  */
 export function ShopPage() {
   const navigate = useNavigate();
-  const { filters, setFilters } = useCatalogFilters();
+  const { filters, setFilters, reset } = useCatalogFilters();
+
+  /* Active search term — drives the summary text above the grid.
+   * Read from `filters.search` (kept in sync with `?q=` by
+   * useCatalogFilters) so this single value reflects what the
+   * product list is currently filtered by. */
+  const searchQuery = filters.search;
 
   /* Categories are loaded once and shared with the filter pills. */
   const categoriesQuery = useQuery({
@@ -81,8 +87,24 @@ export function ShopPage() {
         categories={categories}
         value={filters}
         onChange={setFilters}
+        onReset={reset}
         className="mb-6 sm:mb-8"
       />
+
+      {/* Active-search summary — driven by the global Header search bar.
+          The "Clear all" button in the filter card above is the single
+          affordance for resetting the search (and all other filters). */}
+      {searchQuery && (
+        <div className="flex items-center gap-2 mb-6 text-sm text-slate-600">
+          <Search size={15} className="shrink-0 text-slate-400" aria-hidden />
+          <span className="truncate">
+            Showing results for{" "}
+            <span className="font-semibold text-slate-900">
+              "{searchQuery}"
+            </span>
+          </span>
+        </div>
+      )}
 
       <ProductGrid
         products={products}
@@ -111,8 +133,8 @@ export function ShopPage() {
               description="Try removing a filter or broadening your price range to see more results."
               actions={[
                 {
-                  label: 'Clear filters',
-                  onClick: () => setFilters(EMPTY_FILTERS),
+                  label: 'Clear all filters',
+                  onClick: reset,
                   variant: 'primary',
                   leftIcon: <RotateCcw size={14} aria-hidden />,
                 },

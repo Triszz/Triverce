@@ -1,7 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
-import { Search, X } from 'lucide-react';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 import type { Category } from '@/services/categoryService';
 import type { ProductSort } from '@/services/productService';
@@ -25,56 +21,35 @@ export interface ProductFiltersProps {
   value: ProductFiltersValue;
   onChange: (next: ProductFiltersValue) => void;
   /**
-   * Debounce (ms) before `onChange` fires for the search field.
-   * Defaults to 350 — long enough for typing, short enough to feel live.
+   * Fired by the "Clear all" button. Defaults to `() => onChange(EMPTY_FILTERS)`,
+   * which strips every filter param via the URL hook. Parents can pass a
+   * dedicated reset (e.g. `useCatalogFilters().reset`) to wipe the URL state
+   * even when the parent’s `setFilters` implementation keeps values intact.
    */
-  searchDebounceMs?: number;
+  onReset?: () => void;
   className?: string;
 }
 
 /**
- * ProductFilters — controlled, debounced filter bar.
+ * ProductFilters — controlled filter bar for `/shop`.
  *
- * Renders:
- *   • Search input (with debounce so we don't spam the API while typing).
- *   • Category pills (click to toggle; "All" resets).
- *   • Min / max price inputs.
- *   • Sort dropdown.
- *   • Clear-all reset button (shown only when something is set).
+ * Layout (top to bottom):
+ *   Row 1 — Categories label + horizontally-wrapping pills.
+ *   Row 2 — Price range (Min ─ Max) on the left, Sort dropdown + Clear-all
+ *           link on the right.
+ *
+ * Search is intentionally *not* rendered here: the global Header search bar
+ * is the single entry point for `?q=` on this page. The page-level filter
+ * hook (`useCatalogFilters`) still reads `q` from the URL, so the
+ * underlying search behaviour is preserved — only the redundant UI is gone.
  */
 export function ProductFilters({
   categories,
   value,
   onChange,
-  searchDebounceMs = 350,
+  onReset,
   className,
 }: ProductFiltersProps) {
-  /* Search has its own local state so the user can keep typing while
-   * debouncing the actual filter change up to the parent. */
-  const [searchDraft, setSearchDraft] = useState(value.search);
-
-  // Track the last external value seen so we can reset the draft
-  // without synchronously calling setState inside the effect.
-  const lastExternalSearch = useRef(value.search);
-
-  // Keep the draft in sync if the parent resets externally.
-  useEffect(() => {
-    if (value.search !== lastExternalSearch.current) {
-      lastExternalSearch.current = value.search;
-      setSearchDraft(value.search);
-    }
-  }, [value.search]);
-
-  // Debounce: when the draft changes, schedule an onChange call.
-  useEffect(() => {
-    if (searchDraft === value.search) return;
-    const handle = window.setTimeout(() => {
-      onChange({ ...value, search: searchDraft.trim() });
-    }, searchDebounceMs);
-    return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchDraft]);
-
   const update = (patch: Partial<ProductFiltersValue>) =>
     onChange({ ...value, ...patch });
 
@@ -88,62 +63,14 @@ export function ProductFilters({
   return (
     <div
       className={cn(
-        'space-y-4 rounded-xl bg-white border border-slate-100 shadow-sm p-4 sm:p-5',
+        'flex flex-col rounded-xl bg-white border border-slate-100 shadow-sm p-4 sm:p-5',
         className,
       )}
     >
-      {/* Row 1: search + sort */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1">
-          <Input
-            type="search"
-            value={searchDraft}
-            onChange={(e) => setSearchDraft(e.target.value)}
-            placeholder="Search products by name…"
-            leftIcon={<Search size={16} aria-hidden />}
-            rightAddon={
-              searchDraft ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchDraft('');
-                    update({ search: '' });
-                  }}
-                  className="text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                  aria-label="Clear search"
-                >
-                  <X size={14} aria-hidden />
-                </button>
-              ) : null
-            }
-            aria-label="Search products"
-          />
-        </div>
-        <div className="sm:w-56">
-          <label htmlFor="sortBy" className="sr-only">
-            Sort by
-          </label>
-          <select
-            id="sortBy"
-            value={value.sortBy}
-            onChange={(e) =>
-              update({ sortBy: e.target.value as ProductSort })
-            }
-            className="w-full"
-          >
-            {SORT_OPTIONS_LABELS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Row 2: category pills */}
+      {/* ── Row 1: Categories ──────────────────────────────────────── */}
       <div>
         <p
-          className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2"
+          className="text-xs font-semibold uppercase tracking-wider text-slate-500"
           id="filter-categories-label"
         >
           Categories
@@ -151,7 +78,7 @@ export function ProductFilters({
         <div
           role="radiogroup"
           aria-labelledby="filter-categories-label"
-          className="flex flex-wrap gap-2"
+          className="flex flex-wrap gap-2 mt-2"
         >
           <CategoryPill
             active={value.categoryId === null}
@@ -175,57 +102,109 @@ export function ProductFilters({
         </div>
       </div>
 
-      {/* Row 3: price range + clear */}
-      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-        <div className="grid grid-cols-2 gap-3 flex-1">
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={value.minPrice ?? ''}
-            onChange={(e) =>
-              update({
-                minPrice: e.target.value === '' ? null : Number(e.target.value),
-              })
-            }
-            placeholder="Min price"
-            label="Min price (VND)"
+      {/* ── Divider ────────────────────────────────────────────────── */}
+      <div className="border-t border-slate-100 my-6" />
+
+      {/* ── Row 2: Price | Sort & Clear ────────────────────────────── */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        {/* Left: Price range — two equal-width fields flanking a dash. */}
+        <div className="flex items-end gap-3 flex-1 min-w-0">
+          <PriceField
+            id="filter-min-price"
+            label="Min price"
+            value={value.minPrice}
+            onChange={(n) => update({ minPrice: n })}
           />
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={value.maxPrice ?? ''}
-            onChange={(e) =>
-              update({
-                maxPrice: e.target.value === '' ? null : Number(e.target.value),
-              })
-            }
-            placeholder="Max price"
-            label="Max price (VND)"
+          <span className="pb-2.5 text-slate-400 select-none">–</span>
+          <PriceField
+            id="filter-max-price"
+            label="Max price"
+            value={value.maxPrice}
+            onChange={(n) => update({ maxPrice: n })}
           />
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="md"
-          disabled={!isActive}
-          onClick={() => {
-            setSearchDraft('');
-            onChange(EMPTY_FILTERS);
-          }}
-          aria-label="Clear all filters"
-        >
-          Clear all
-        </Button>
+
+        {/* Right: Sort + Clear */}
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="flex flex-col">
+            <label
+              htmlFor="sortBy"
+              className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1"
+            >
+              Sort by
+            </label>
+            <select
+              id="sortBy"
+              value={value.sortBy}
+              onChange={(e) =>
+                update({ sortBy: e.target.value as ProductSort })
+              }
+              className="h-11"
+            >
+              {SORT_OPTIONS_LABELS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => (onReset ? onReset() : onChange(EMPTY_FILTERS))}
+            disabled={!isActive}
+            className={cn(
+              'self-end text-sm font-medium transition-colors mb-2.5',
+              isActive
+                ? 'text-blue-600 hover:text-blue-800 cursor-pointer'
+                : 'text-slate-400 cursor-not-allowed',
+            )}
+            aria-label="Clear all filters"
+          >
+            Clear all
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Small pill primitive — kept local to this file.
+ * Small primitives — kept local to this file.
  * ──────────────────────────────────────────────────────────────────────── */
+
+interface PriceFieldProps {
+  id: string;
+  label: string;
+  value: number | null;
+  onChange: (next: number | null) => void;
+}
+
+/** Compact price input — labeled, fills its share of the row, height-aligned
+ *  to the sort `<select>` so the controls sit on the same baseline. */
+function PriceField({ id, label, value, onChange }: PriceFieldProps) {
+  return (
+    <div className="flex flex-col flex-1 min-w-[150px]">
+      <label
+        htmlFor={id}
+        className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1"
+      >
+        {label}
+      </label>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={value ?? ''}
+        onChange={(e) =>
+          onChange(e.target.value === '' ? null : Number(e.target.value))
+        }
+        placeholder="0"
+        className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 focus:border-[#002b5b] focus:outline-none focus:ring-2 focus:ring-[#002b5b]/20 transition-colors"
+      />
+    </div>
+  );
+}
 
 function CategoryPill({
   active,
