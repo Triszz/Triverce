@@ -33,23 +33,27 @@ The codebase reflects a production-grade mindset — strict **TypeScript** every
 ## ✨ Key Features
 
 ### 🏪 Multi-vendor Architecture
+
 - **Dedicated seller storefronts** — each product links to a seller's public profile (`/store/:sellerId`) with store name, product catalog, and trust signal.
 - **Seller-scoped product filtering** — list queries support `sellerId` filters, ensuring each seller sees only their own inventory in the dashboard.
 - **Category hierarchy** — products belong to a `Category` (with optional parent/child relationships), enabling nested navigation and a breadcrumb-driven discovery flow.
 
 ### 🎛️ Advanced State Management
+
 - **Synchronized variant selector + image gallery** — selecting a color/size variant instantly swaps the hero image, refreshes the stock badge, and updates the price; thumbnail clicks can also re-select a variant.
 - **Optimistic UI with commit debouncing** — the quantity stepper keeps a local draft so the UI is instant, while the upstream API only fires after a 400ms debounce or a single click.
 - **TanStack Query** for server cache, with query key conventions that mirror the URL (`['product', 'by-slug', slug]`).
 - **Zustand stores** for client-only state (auth, UI drawers, cart).
 
 ### 🛒 Seamless Checkout Flow
+
 - **Dynamic address book** — users can pick a saved address or enter a new one; address cards are radio-style cards with full Vietnamese localization.
 - **VN mobile validation** — Zod schemas enforce Vietnamese phone number validity (`/^(0|\+84)(3|5|7|8|9)\d{8}$/`).
 - **Order summary synchronization** — the summary panel recomputes subtotal, shipping, and total reactively as the cart mutates.
-- **Auth-guarded cart flow** — unauthenticated users are intercepted *before* the add-to-cart call fails, preventing misleading success toasts.
+- **Auth-guarded cart flow** — unauthenticated users are intercepted _before_ the add-to-cart call fails, preventing misleading success toasts.
 
 ### 🎨 Optimized UI/UX
+
 - **Dynamic breadcrumbs** — `Home / Shop / Category / Product` with click-through filtering via `?category=...` query params.
 - **Graceful image fallbacks** — `pickHeroImage()` walks `images[] → imageUrl → null` so legacy data renders without breaking.
 - **Loading skeletons** — `Skeleton`, `SkeletonText` primitives prevent layout shift during fetch.
@@ -66,14 +70,14 @@ The backend follows a **layered, dependency-injected architecture** — every la
 
 ### Design Patterns
 
-| Pattern | Purpose | Where it lives |
-|---|---|---|
+| Pattern                           | Purpose                                                                                                                          | Where it lives                                      |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | **Dependency Injection (Awilix)** | Single IoC container resolves & injects every service, repository, and controller at boot. New modules just register themselves. | `backend/src/server.ts`, `backend/src/container.ts` |
-| **Repository Pattern** | Every persistence call goes through a `*.repository.ts` class. Controllers and services never touch Prisma directly. | `backend/src/modules/*/[name].repository.ts` |
-| **Service Layer** | Each module has a service that holds business logic and orchestrates 1+ repositories. | `backend/src/modules/*/[name].service.ts` |
-| **DTO / Schema Validation (Zod)** | Request payloads are validated at the boundary with `z.object(...)` schemas; the parsed result is the contract. | `backend/src/modules/*/[name].dto.ts` |
-| **Entity Pattern** | Domain objects wrap DB rows with helper methods (`getMinPrice`, `toPublicDetail`, ...). | `backend/src/modules/*/[name].entity.ts` |
-| **JWT + bcrypt auth** | Stateless auth with hashed passwords; auth middleware protects private routes. | `backend/src/modules/auth/` |
+| **Repository Pattern**            | Every persistence call goes through a `*.repository.ts` class. Controllers and services never touch Prisma directly.             | `backend/src/modules/*/[name].repository.ts`        |
+| **Service Layer**                 | Each module has a service that holds business logic and orchestrates 1+ repositories.                                            | `backend/src/modules/*/[name].service.ts`           |
+| **DTO / Schema Validation (Zod)** | Request payloads are validated at the boundary with `z.object(...)` schemas; the parsed result is the contract.                  | `backend/src/modules/*/[name].dto.ts`               |
+| **Entity Pattern**                | Domain objects wrap DB rows with helper methods (`getMinPrice`, `toPublicDetail`, ...).                                          | `backend/src/modules/*/[name].entity.ts`            |
+| **JWT + bcrypt auth**             | Stateless auth with hashed passwords; auth middleware protects private routes.                                                   | `backend/src/modules/auth/`                         |
 
 ### Backend Modules (14)
 
@@ -106,25 +110,25 @@ backend/src/modules/
 
 PostgreSQL via Prisma. The schema covers all marketplace concerns: identity, catalog, commerce, and fulfillment.
 
-| Model | Purpose | Key fields |
-|---|---|---|
-| `User` | Authenticated buyer / seller account | `email`, `passwordHash`, `fullName`, `phone`, `role` |
-| `Seller` | Publicly-listed seller profile | `userId`, `storeName`, `slug`, `description`, `isVerified` |
-| `Category` | Hierarchical taxonomy | `name`, `slug`, `parentId`, `description`, `sortOrder` |
-| `Product` | Top-level catalog entry | `sellerId`, `categoryId`, `name`, `slug`, `basePrice`, `images[]`, `isActive` |
-| `ProductVariant` | SKU-level entry (size, color, etc.) | `productId`, `sku`, `price`, `imageUrl`, `isActive` |
-| `VariantAttributeValue` | Generic key/value variant attrs | `variantId`, `attributeId`, `value` |
-| `ProductAttribute` | Attribute definitions (e.g. "Size") | `name` |
-| `Inventory` | Per-variant stock tracking | `variantId`, `quantity`, `reserved` |
-| `Address` | User shipping address book | `userId`, `recipient`, `phone`, `line1`, `city`, `isDefault` |
-| `Cart` | Persistent cart per user | `userId`, `updatedAt` |
-| `CartItem` | Lines in the cart | `cartId`, `variantId`, `quantity` |
-| `Order` | Order header | `userId`, `addressId`, `total`, `status`, `paymentMethod` |
-| `OrderItem` | One line per variant | `orderId`, `variantId`, `quantity`, `price`, `sellerId` |
-| `Payment` | Payment record | `orderId`, `method`, `status`, `transactionId` |
-| `Review` | Buyer reviews on products | `userId`, `productId`, `rating`, `comment` |
-| `WishlistItem` | Saved products | `userId`, `productId` |
-| `ImageUpload` | Upload registry | `userId`, `url`, `purpose` |
+| Model                   | Purpose                              | Key fields                                                                    |
+| ----------------------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| `User`                  | Authenticated buyer / seller account | `email`, `passwordHash`, `fullName`, `phone`, `role`                          |
+| `Seller`                | Publicly-listed seller profile       | `userId`, `storeName`, `slug`, `description`, `isVerified`                    |
+| `Category`              | Hierarchical taxonomy                | `name`, `slug`, `parentId`, `description`, `sortOrder`                        |
+| `Product`               | Top-level catalog entry              | `sellerId`, `categoryId`, `name`, `slug`, `basePrice`, `images[]`, `isActive` |
+| `ProductVariant`        | SKU-level entry (size, color, etc.)  | `productId`, `sku`, `price`, `imageUrl`, `isActive`                           |
+| `VariantAttributeValue` | Generic key/value variant attrs      | `variantId`, `attributeId`, `value`                                           |
+| `ProductAttribute`      | Attribute definitions (e.g. "Size")  | `name`                                                                        |
+| `Inventory`             | Per-variant stock tracking           | `variantId`, `quantity`, `reserved`                                           |
+| `Address`               | User shipping address book           | `userId`, `recipient`, `phone`, `line1`, `city`, `isDefault`                  |
+| `Cart`                  | Persistent cart per user             | `userId`, `updatedAt`                                                         |
+| `CartItem`              | Lines in the cart                    | `cartId`, `variantId`, `quantity`                                             |
+| `Order`                 | Order header                         | `userId`, `addressId`, `total`, `status`, `paymentMethod`                     |
+| `OrderItem`             | One line per variant                 | `orderId`, `variantId`, `quantity`, `price`, `sellerId`                       |
+| `Payment`               | Payment record                       | `orderId`, `method`, `status`, `transactionId`                                |
+| `Review`                | Buyer reviews on products            | `userId`, `productId`, `rating`, `comment`                                    |
+| `WishlistItem`          | Saved products                       | `userId`, `productId`                                                         |
+| `ImageUpload`           | Upload registry                      | `userId`, `url`, `purpose`                                                    |
 
 > **Soft deletes** — Products stamp `deletedAt` and slug-suffix-renames on delete so the URL can be reused safely.
 
@@ -134,17 +138,17 @@ PostgreSQL via Prisma. The schema covers all marketplace concerns: identity, cat
 
 ### Prerequisites
 
-| Tool | Version |
-|---|---|
-| Node.js | 18+ (LTS recommended) |
-| PostgreSQL | 14+ |
-| npm | 9+ |
+| Tool       | Version               |
+| ---------- | --------------------- |
+| Node.js    | 18+ (LTS recommended) |
+| PostgreSQL | 14+                   |
+| npm        | 9+                    |
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/triverce.git
-cd triverce
+git clone https://github.com/Triszz/Triverce.git
+cd Triverce
 ```
 
 ### 2. Database setup
@@ -207,32 +211,32 @@ Open `http://localhost:5173` and you should see the Triverce homepage. The selle
 
 ### Frontend
 
-| Tool | Why it's used |
-|---|---|
-| **React 18** | Concurrent rendering, automatic batching, `Suspense` for loading states |
-| **TypeScript** | Strict mode across the board — no `any` in production code |
-| **Vite** | Sub-second HMR, ESM-native, fastest dev experience |
-| **Tailwind CSS** | Utility-first, no naming-convention arguments, design-token friendly |
-| **React Router 6** | Data router, nested routes, URL-as-state |
-| **TanStack Query** | Server cache, background refetch, query invalidation |
-| **Zustand** | Tiny client-only state stores (auth, UI drawers) |
-| **React Hook Form + Zod** | Performant forms with runtime validation |
-| **Sonner** | Accessible, non-blocking toast notifications |
-| **Lucide React** | Tree-shakeable icon set |
-| **class-variance-authority** | Type-safe variant API for Button, Badge, Card, etc. |
+| Tool                         | Why it's used                                                           |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| **React 18**                 | Concurrent rendering, automatic batching, `Suspense` for loading states |
+| **TypeScript**               | Strict mode across the board — no `any` in production code              |
+| **Vite**                     | Sub-second HMR, ESM-native, fastest dev experience                      |
+| **Tailwind CSS**             | Utility-first, no naming-convention arguments, design-token friendly    |
+| **React Router 6**           | Data router, nested routes, URL-as-state                                |
+| **TanStack Query**           | Server cache, background refetch, query invalidation                    |
+| **Zustand**                  | Tiny client-only state stores (auth, UI drawers)                        |
+| **React Hook Form + Zod**    | Performant forms with runtime validation                                |
+| **Sonner**                   | Accessible, non-blocking toast notifications                            |
+| **Lucide React**             | Tree-shakeable icon set                                                 |
+| **class-variance-authority** | Type-safe variant API for Button, Badge, Card, etc.                     |
 
 ### Backend
 
-| Tool | Why it's used |
-|---|---|
-| **Node.js + Express** | Battle-tested, minimal, easy to extend |
-| **Awilix** | Dependency injection container — IoC everywhere |
-| **Prisma ORM** | Type-safe DB access, declarative migrations, generated types |
-| **PostgreSQL** | Strong relational integrity, full-text search, JSON columns |
-| **Zod** | Runtime validation at the API boundary |
-| **bcrypt** | Password hashing |
-| **jsonwebtoken** | Stateless auth via JWT |
-| **Multer + custom storage** | File uploads with disk persistence |
+| Tool                        | Why it's used                                                |
+| --------------------------- | ------------------------------------------------------------ |
+| **Node.js + Express**       | Battle-tested, minimal, easy to extend                       |
+| **Awilix**                  | Dependency injection container — IoC everywhere              |
+| **Prisma ORM**              | Type-safe DB access, declarative migrations, generated types |
+| **PostgreSQL**              | Strong relational integrity, full-text search, JSON columns  |
+| **Zod**                     | Runtime validation at the API boundary                       |
+| **bcrypt**                  | Password hashing                                             |
+| **jsonwebtoken**            | Stateless auth via JWT                                       |
+| **Multer + custom storage** | File uploads with disk persistence                           |
 
 ---
 
