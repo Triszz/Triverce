@@ -51,39 +51,43 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const showPlaceholder = !heroSrc || imgError;
 
   return (
-    <Link
-      to={`/product/${product.slug}`}
-      aria-label={`View ${product.name}`}
+    <div
       className={cn(
         'group block bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden',
         'transition-all duration-200 ease-out',
         'hover:shadow-md hover:-translate-y-0.5 hover:border-slate-200',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2',
+        'focus-within:ring-2 focus-within:ring-[#002b5b] focus-within:ring-offset-2',
         className,
       )}
     >
-      <div className="relative aspect-square bg-slate-50 overflow-hidden">
-        {showPlaceholder ? (
-          <PlaceholderImage name={product.name} />
-        ) : (
-          <img
-            src={heroSrc}
-            alt={product.name}
-            loading="lazy"
-            onError={() => setImgError(true)}
-            className={cn(
-              'h-full w-full object-cover',
-              'transition-transform duration-300 ease-out',
-              'group-hover:scale-105',
-            )}
-          />
-        )}
-        {!product.isActive && (
-          <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md">
-            Unavailable
-          </span>
-        )}
-      </div>
+      <Link
+        to={`/product/${product.slug}`}
+        aria-label={`View ${product.name}`}
+        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2"
+      >
+        <div className="relative aspect-square bg-slate-50 overflow-hidden">
+          {showPlaceholder ? (
+            <PlaceholderImage name={product.name} />
+          ) : (
+            <img
+              src={heroSrc}
+              alt={product.name}
+              loading="lazy"
+              onError={() => setImgError(true)}
+              className={cn(
+                'h-full w-full object-cover',
+                'transition-transform duration-300 ease-out',
+                'group-hover:scale-105',
+              )}
+            />
+          )}
+          {!product.isActive && (
+            <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md">
+              Unavailable
+            </span>
+          )}
+        </div>
+      </Link>
 
       <div className="p-4 space-y-2">
         {product.storeName && (
@@ -92,14 +96,8 @@ export function ProductCard({ product, className }: ProductCardProps) {
             title={product.storeName}
           >
             <Store size={11} className="shrink-0 text-slate-400" aria-hidden />
-            {/*
-              Link to the store profile page.
-              stopPropagation prevents the card's outer <Link> from navigating
-              to the product page when the user clicks the store name.
-            */}
             <Link
               to={`/store/${product.sellerId}`}
-              onClick={(e) => e.stopPropagation()}
               className="hover:text-[#002b5b] hover:underline transition-colors"
             >
               {product.storeName}
@@ -107,14 +105,15 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </p>
         )}
 
-        <h3
-          className={cn(
-            'text-sm font-semibold text-slate-900 leading-snug line-clamp-2',
-            'transition-colors group-hover:text-[#002b5b]',
-          )}
-          title={product.name}
-        >
-          {product.name}
+        <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2">
+          <Link
+            to={`/product/${product.slug}`}
+            aria-label={`View ${product.name}`}
+            title={product.name}
+            className="transition-colors group-hover:text-[#002b5b] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2"
+          >
+            {product.name}
+          </Link>
         </h3>
 
         <div className="flex items-baseline gap-1.5">
@@ -129,6 +128,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
           )}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
