@@ -56,6 +56,26 @@ export class SellerService {
   }
 
   /**
+   * List public store profiles whose `storeName` matches `search`
+   * (case-insensitive). Used by the buyer-side global search bar on
+   * `/shop?q=…` to surface matching storefronts alongside the product
+   * grid.
+   *
+   * Returns an empty array when `search` is empty — callers should treat
+   * this as "store search disabled", not "no matches".
+   */
+  async listPublicStores(params: {
+    search: string;
+    limit?: number;
+  }): Promise<PublicStoreProfile[]> {
+    const rows = await this.userRepository.findPublicStores(params);
+    return rows.map((row) => ({
+      ...row,
+      joinedAt: row.createdAt,
+    }));
+  }
+
+  /**
    * Update the authenticated seller's storefront profile.
    *
    * All fields are optional — only fields that are defined in `dto`

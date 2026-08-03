@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { SearchX, RotateCcw, Search } from 'lucide-react';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { categoryService } from '@/services/categoryService';
 import { productService } from '@/services/productService';
+import { storeService, type StoreProfile } from '@/services/storeService';
 import { ProductFilters } from '@/features/catalog/components/ProductFilters';
 import { EMPTY_FILTERS } from '@/features/catalog/components/ProductFilters.constants';
 import { ProductGrid } from '@/features/catalog/components/ProductGrid';
@@ -17,16 +18,21 @@ import { useCatalogFilters } from '@/features/catalog/hooks/useCatalogFilters';
  *
  * The URL is the source of truth for filter state, so the same view can be
  * bookmarked and shared. We forward `filters` straight into `productService.list`.
+ *
+ * Cross-entity search: when `?q=…` is present we also fan out to
+ * `storeService.list` and surface matching storefronts above the product
+ * grid in a dedicated section.
  */
 export function ShopPage() {
   const navigate = useNavigate();
   const { filters, setFilters, reset } = useCatalogFilters();
 
-  /* Active search term — drives the summary text above the grid.
-   * Read from `filters.search` (kept in sync with `?q=` by
-   * useCatalogFilters) so this single value reflects what the
+  /* Active search term — drives the summary text + the parallel
+   * store-search query. Read from `filters.search` (kept in sync with
+   * `?q=` by useCatalogFilters) so this single value reflects what the
    * product list is currently filtered by. */
   const searchQuery = filters.search;
+  const trimmedQuery = searchQuery.trim();
 
   /* Categories are loaded once and shared with the filter pills. */
   const categoriesQuery = useQuery({
@@ -52,6 +58,16 @@ export function ShopPage() {
     placeholderData: (previous) => previous,
   });
 
+  /* Parallel store-search query — only fires when there's a non-empty
+   * `?q=…`. When the search box is empty, React Query treats the query
+   * as disabled (no network call) and we treat its data as `[]`. */
+  const storesQuery = useQuery({
+    queryKey: ['stores', 'search', trimmedQuery],
+    queryFn: () => storeService.list({ search: trimmedQuery, limit: 12 }),
+    enabled: trimmedQuery.length > 0,
+    staleTime: 30_000,
+  });
+
   const categories = useMemo(
     () => categoriesQuery.data?.data ?? [],
     [categoriesQuery.data],
@@ -59,6 +75,12 @@ export function ShopPage() {
 
   const totalCount = productsQuery.data?.total ?? 0;
   const products = productsQuery.data?.data ?? [];
+  const stores: StoreProfile[] = storesQuery.data ?? [];
+
+  // The empty state should only trigger when BOTH the product grid AND
+  // the matching-shops section are empty. If a search returned at least
+  // one shop we let the user click into it instead of showing a dead-end.
+  const hasResults = products.length > 0 || stores.length > 0;
 
   return (
     <>
@@ -106,12 +128,38 @@ export function ShopPage() {
         </div>
       )}
 
+      {/* ── Matching shops (only when ?q=… is set and the store query
+              returned at least one storefront). Renders above the product
+              grid so storefronts are visually distinct from SKUs. */}
+      {stores.length > 0 && (
+        <section
+          aria-labelledby="matching-shops-heading"
+          className="mb-8"
+        >
+          <h3
+            id="matching-shops-heading"
+            className="text-lg font-semibold text-slate-800 mb-4"
+          >
+            Shops matching "{searchQuery}"
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {stores.map((store) => (
+              <StoreResultCard key={store.id} store={store} />
+            ))}
+          </div>
+          <hr className="my-8 border-slate-200" />
+        </section>
+      )}
+
       <ProductGrid
         products={products}
         isLoading={productsQuery.isLoading && products.length === 0}
         skeletonCount={8}
         emptyState={
-          filters === EMPTY_FILTERS ? (
+          // Hide the empty state entirely if the matching-shops section
+          // is showing something useful — better UX than a confusing
+          // "no products" message alongside a list of found stores.
+          hasResults ? null : filters === EMPTY_FILTERS ? (
             <EmptyState
               tone="brand"
               icon={<SearchX size={28} aria-hidden />}
@@ -130,7 +178,7 @@ export function ShopPage() {
               tone="neutral"
               icon={<SearchX size={28} aria-hidden />}
               title="Nothing matches those filters"
-              description="Try removing a filter or broadening your price range to see more results."
+              description={`We couldn't find any products or shops matching "${searchQuery}". Try a different search term or clear the filters.`}
               actions={[
                 {
                   label: 'Clear all filters',
@@ -145,5 +193,63 @@ export function ShopPage() {
       />
     </div>
     </>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * StoreResultCard — visual sibling of a ProductCard, deliberately styled
+ * distinctly (slate background, no price block) so a buyer can tell at a
+ * glance that this routes to a storefront, not a product detail page.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+interface StoreResultCardProps {
+  store: StoreProfile;
+}
+
+function StoreResultCard({ store }: StoreResultCardProps) {
+  const displayName = store.storeName ?? 'Unnamed store';
+  const productLabel =
+    store.productCount === 1 ? '1 product' : `${store.productCount} products`;
+
+  return (
+    <Link
+      to={`/store/${store.id}`}
+      className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2"
+    >
+      <StoreAvatar name={displayName} logoUrl={store.logoUrl} />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-slate-900 truncate">
+          {displayName}
+        </p>
+        <p className="text-xs text-slate-500 mt-0.5">{productLabel}</p>
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * Storefront avatar — image-or-initial fallback. Mirrors the pattern
+ * already used on StoreProfilePage so cards on the Shop page look like
+ * miniature versions of the same identity element.
+ */
+function StoreAvatar({ name, logoUrl }: { name: string; logoUrl: string | null }) {
+  const initial = name.trim().charAt(0).toUpperCase() || '?';
+
+  if (!logoUrl) {
+    return (
+      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#1a4a8a] to-[#002b5b] flex items-center justify-center shrink-0 border border-white/20">
+        <span className="text-lg font-bold text-white select-none">
+          {initial}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={logoUrl}
+      alt={`${name} logo`}
+      className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200"
+    />
   );
 }

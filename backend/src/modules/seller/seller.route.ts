@@ -34,6 +34,18 @@ export function createSellerRouter(controller: SellerController): Router {
   );
 
   /**
+   * GET /api/seller/stores?search=&limit=
+   *
+   * Public list of storefronts matching a case-insensitive `search`
+   * against `storeName`. Powers the buyer-side global search results
+   * on `/shop?q=…`. No authentication required.
+   *
+   * Declared BEFORE `/:sellerId` so the static segment isn't captured
+   * as a dynamic parameter.
+   */
+  router.get("/stores", controller.listPublicStores);
+
+  /**
    * GET /api/seller/:sellerId
    *
    * Returns a seller's public storefront profile: storeName, logo,

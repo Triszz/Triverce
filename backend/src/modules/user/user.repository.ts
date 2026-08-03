@@ -185,4 +185,82 @@ export class UserRepository {
       productCount,
     };
   }
+
+  /**
+   * List public store profiles for the global / cross-store search.
+   *
+   * Returns up to `limit` active, non-deleted sellers whose store name
+   * case-insensitively contains `search`. Only sellers with at least one
+   * active product are returned, so a buyer who searches "Tris" never
+   * sees an empty storefront. Result shape mirrors `findPublicStoreProfile`.
+   *
+   * Sorted by most recently joined first — surfacing fresh sellers gives
+   * the marketplace a more "alive" feel when the query matches a lot of
+   * stores.
+   */
+  async findPublicStores(params: {
+    search: string;
+    limit?: number;
+  }): Promise<
+    Array<{
+      id: string;
+      storeName: string | null;
+      logoUrl: string | null;
+      description: string | null;
+      supportEmail: string | null;
+      phone: string | null;
+      address: string | null;
+      createdAt: Date;
+      productCount: number;
+    }>
+  > {
+    const limit = Math.min(Math.max(params.limit ?? 10, 1), 50);
+    const trimmed = params.search.trim();
+    if (!trimmed) return [];
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        role: "seller",
+        isActive: true,
+        deletedAt: null,
+        // Case-insensitive substring match on the store name. Mirrors
+        // the same pattern used by ProductRepository for product names.
+        // The Prisma `not: null` constraint is implicit because `contains`
+        // on a nullable column matches only non-null values.
+        storeName: { contains: trimmed, mode: "insensitive" },
+        // Only surface stores that have at least one active, non-deleted
+        // product — keeps the results meaningful for buyers.
+        products: { some: { isActive: true, deletedAt: null } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        storeName: true,
+        logoUrl: true,
+        description: true,
+        supportEmail: true,
+        phone: true,
+        address: true,
+        createdAt: true,
+        _count: {
+          select: {
+            products: { where: { isActive: true, deletedAt: null } },
+          },
+        },
+      },
+    });
+
+    return users.map((u) => ({
+      id: u.id,
+      storeName: u.storeName,
+      logoUrl: u.logoUrl,
+      description: u.description,
+      supportEmail: u.supportEmail,
+      phone: u.phone,
+      address: u.address,
+      createdAt: u.createdAt,
+      productCount: u._count.products,
+    }));
+  }
 }

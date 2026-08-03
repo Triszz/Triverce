@@ -23,6 +23,38 @@ export class SellerController {
     }
   };
 
+  /**
+   * GET /api/seller/stores — paginated public list of stores matching
+   * the `?search=` query. Case-insensitive substring match on
+   * `storeName`. No authentication required.
+   *
+   * Query params:
+   *   • search (required, non-empty after trim)
+   *   • limit  (optional, 1–50, defaults to 10)
+   */
+  listPublicStores = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const search = String(req.query.search ?? "").trim();
+      if (!search) {
+        res.status(200).json({ success: true, data: [] });
+        return;
+      }
+      const rawLimit = Number(req.query.limit);
+      const limit = Number.isFinite(rawLimit)
+        ? Math.min(Math.max(Math.floor(rawLimit), 1), 50)
+        : undefined;
+
+      const data = await this.sellerService.listPublicStores({ search, limit });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getStoreProfile = async (
     req: Request,
     res: Response,

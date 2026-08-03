@@ -10,6 +10,7 @@ import {
   Store,
   AlertCircle,
   CheckCircle2,
+  Info,
 } from "lucide-react";
 import { useSellerProfile } from "../hooks/useSellerProfile";
 import { useUpdateSellerProfile, uploadLogo } from "../hooks/useUpdateSellerProfile";
@@ -59,7 +60,10 @@ function Field({ label, error, hint, required, children }: FieldProps) {
       </label>
       {children}
       {error && (
-        <p className="text-xs text-red-600 flex items-center gap-1">
+        <p
+          role="alert"
+          className="text-xs text-red-600 flex items-center gap-1"
+        >
           <AlertCircle size={12} aria-hidden />
           {error}
         </p>
@@ -281,6 +285,13 @@ export function StoreSettingsPage() {
   });
 
   // react-hook-form — default values are set once when the profile arrives.
+  //
+  // `mode: "onChange"` (was "onBlur") is critical here: the Save button's
+  // disabled state is gated on `isValid`, and `isValid` is only kept in
+  // sync with the current resolver state when the form re-validates on
+  // every change. With `onBlur`, validation only ran once the user had
+  // blurred *every* field — meaning the button stayed disabled even after
+  // a perfectly valid edit, which is the bug the user reported.
   const {
     register,
     handleSubmit,
@@ -289,7 +300,7 @@ export function StoreSettingsPage() {
     formState: { errors, isDirty, isValid },
   } = useForm<FormValues>({
     resolver: zodResolver(storeProfileSchema),
-    mode: "onBlur",
+    mode: "onChange",
     defaultValues: {
       storeName: "",
       description: "",
@@ -299,6 +310,23 @@ export function StoreSettingsPage() {
       address: "",
     },
   });
+
+  // Debug breadcrumb: in dev, mirror the form state to the console so
+  // "why is the button disabled?" never turns into a wild-goose chase.
+  // Kept as a one-shot effect (no deps) so we don't spam the console on
+  // every keystroke.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log(
+      "[StoreSettingsPage] form state — errors:",
+      errors,
+      "isValid:",
+      isValid,
+      "isDirty:",
+      isDirty,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync form defaults when the profile query resolves.
   // useEffect avoids overwriting user edits on re-renders.
@@ -408,6 +436,7 @@ export function StoreSettingsPage() {
                   placeholder="e.g. Ngọc Minh Tech Store"
                   maxLength={50}
                   disabled={isSaving}
+                  aria-invalid={errors.storeName ? "true" : "false"}
                   className={`
                     w-full h-10 px-3 rounded-lg border text-sm text-slate-900
                     placeholder:text-slate-300 bg-white
@@ -466,6 +495,7 @@ export function StoreSettingsPage() {
                 type="email"
                 placeholder="support@yourstore.com"
                 disabled={isSaving}
+                aria-invalid={errors.supportEmail ? "true" : "false"}
                 className={`
                   w-full h-10 px-3 rounded-lg border text-sm text-slate-900
                   placeholder:text-slate-300 bg-white
@@ -485,9 +515,11 @@ export function StoreSettingsPage() {
             >
               <input
                 type="tel"
+                inputMode="numeric"
                 placeholder="0901 234 567"
-                maxLength={20}
+                maxLength={11}
                 disabled={isSaving}
+                aria-invalid={errors.phone ? "true" : "false"}
                 className={`
                   w-full h-10 px-3 rounded-lg border text-sm text-slate-900
                   placeholder:text-slate-300 bg-white
@@ -565,7 +597,7 @@ export function StoreSettingsPage() {
                 ${
                   isSaving
                     ? "bg-[#002b5b] text-white opacity-70 cursor-not-allowed"
-                    : isDirty
+                    : isDirty && isValid
                     ? "bg-[#002b5b] text-white hover:bg-[#001f3f] cursor-pointer shadow-sm hover:shadow"
                     : "bg-slate-100 text-slate-400 cursor-not-allowed"
                 }
@@ -585,6 +617,25 @@ export function StoreSettingsPage() {
             </button>
           </div>
         </div>
+
+        {/* Dev-only form-state badge — helps answer "why is the button
+            disabled?" without opening DevTools. Stripped from production
+            builds by Vite's tree-shaker. */}
+        {import.meta.env.DEV && (
+          <div
+            aria-hidden
+            className="mt-3 inline-flex items-center gap-2 text-[11px] font-mono text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1"
+          >
+            <Info size={11} aria-hidden />
+            <span>
+              isDirty: <b className={isDirty ? "text-emerald-600" : "text-slate-400"}>{String(isDirty)}</b>
+              {" • "}
+              isValid: <b className={isValid ? "text-emerald-600" : "text-red-500"}>{String(isValid)}</b>
+              {" • "}
+              errors: <b className={Object.keys(errors).length > 0 ? "text-red-500" : "text-slate-400"}>{Object.keys(errors).length}</b>
+            </span>
+          </div>
+        )}
       </form>
     </div>
   );

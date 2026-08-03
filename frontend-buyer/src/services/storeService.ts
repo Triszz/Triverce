@@ -38,6 +38,17 @@ function qualifyUrl(url: string | null): string | null {
  * Service
  * ────────────────────────────────────────────────────────────────────────── */
 
+export interface StoreListParams {
+  /** Case-insensitive substring match on store name. */
+  search: string;
+  /** 1–50; defaults to 10 on the backend if omitted. */
+  limit?: number;
+}
+
+export interface StoreListResult {
+  data: StoreProfile[];
+}
+
 export const storeService = {
   /**
    * GET /seller/:sellerId — public store profile with active product count.
@@ -53,5 +64,36 @@ export const storeService = {
       ...data.data,
       logoUrl: qualifyUrl(data.data.logoUrl),
     };
+  },
+
+  /**
+   * GET /seller/stores?search=&limit= — public storefront search.
+   *
+   * Used by the buyer-side global search: when the user types a term
+   * like "Tris" and lands on `/shop?q=Tris`, this returns matching
+   * stores to display above the product grid.
+   *
+   * Returns an empty array when the server has no matches OR when
+   * `search` is empty (the backend short-circuits to `[]`). Callers
+   * should treat both identically.
+   */
+  list: async (params: StoreListParams): Promise<StoreProfile[]> => {
+    const trimmed = params.search.trim();
+    if (!trimmed) return [];
+
+    const { data } = await apiClient.get<ApiResponse<StoreProfile[]>>(
+      '/seller/stores',
+      {
+        params: {
+          search: trimmed,
+          ...(params.limit !== undefined ? { limit: params.limit } : {}),
+        },
+      },
+    );
+    if (!data.success) throw new Error('Failed to search stores');
+    return data.data.map((store) => ({
+      ...store,
+      logoUrl: qualifyUrl(store.logoUrl),
+    }));
   },
 };
