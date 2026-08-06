@@ -76,6 +76,21 @@ export interface CancelOrderPayload {
   reason: string;
 }
 
+/**
+ * Per-status order counts returned by `GET /api/orders/counts`. Every
+ * status key is always present (zero-valued when no orders in that
+ * bucket) so the tab bar can render each pill unconditionally.
+ */
+export interface OrderCounts {
+  total: number;
+  pending: number;
+  confirmed: number;
+  shipping: number;
+  delivered: number;
+  cancelled: number;
+  failed: number;
+}
+
 interface ApiSuccess<T> {
   success: true;
   data: T;
@@ -109,6 +124,12 @@ function unwrap<T>(payload: ApiSuccess<T>): T {
 export interface ListOrdersParams {
   page?: number;
   limit?: number;
+  /**
+   * Optional status filter (one of `pending`, `confirmed`, `shipping`,
+   * `delivered`, `cancelled`, `failed`). When omitted the backend
+   * returns orders in any status.
+   */
+  status?: OrderPublic['status'];
 }
 
 export const orderService = {
@@ -134,6 +155,9 @@ export const orderService = {
    *  The backend envelope is `{ success, data: { orders, total, page, limit } }`
    *  — meta fields are siblings of `orders` inside `data`, NOT a nested
    *  `meta` object. See `ApiSuccessOrderList`.
+   *
+   *  `status` is an optional filter; the `MyOrdersPage` passes it through
+   *  from its tab bar so the backend can return just that bucket.
    */
   list: async (
     params: ListOrdersParams = {},
@@ -150,6 +174,20 @@ export const orderService = {
       page: data.data.page ?? 1,
       limit: data.data.limit ?? (params.limit ?? 10),
     };
+  },
+
+  /**
+   * GET /orders/counts — lightweight per-status counts for the tab bar.
+   *
+   * Returns: { total, pending, confirmed, shipping, delivered, cancelled, failed }
+   *
+   * Fetched once on mount so every tab pill can render its count without
+   * 6 separate paginated calls.
+   */
+  getCounts: async (): Promise<OrderCounts> => {
+    const { data } = await apiClient.get<ApiSuccess<OrderCounts>>('/orders/counts');
+    if (!data.success) throw new Error('Failed to load order counts');
+    return data.data;
   },
 
   /** GET /orders/:id — single order with items + status logs. */

@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
+  CalendarDays,
+  Mail,
+  MapPin,
   Package,
+  Phone,
   ShoppingBag,
-  Store,
   Truck,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,6 +22,7 @@ import {
   productService,
   type ProductVariant,
 } from '@/services/productService';
+import { useStoreProfile } from '@/hooks/useStoreProfile';
 import { useAuthStore } from '@/stores/useAuthStore';
 import {
   VariantPicker,
@@ -27,6 +31,7 @@ import {
 import { buildAttributeAxes } from '@/features/catalog/components/variantUtils';
 import { useCart } from '@/hooks/useCart';
 import { useUiStore } from '@/stores/useUiStore';
+import { ProductRatings } from '@/features/reviews/components/ProductRatings';
 
 /**
  * VND currency formatter — mirrors the one inside `<PriceTag>` so a
@@ -64,6 +69,14 @@ export function ProductDetailPage() {
     },
     enabled: !!slug,
   });
+
+  // The store info card surfaces the seller's public profile (logo,
+  // joined date, product count, contact info). We piggy-back on the
+  // product query's data so the card only fetches once the product
+  // has resolved — no competing spinner on initial page load. The
+  // hook itself uses a 60s staleTime so subsequent product pages
+  // that share the same seller (common in catalogues) hit the cache.
+  const storeQuery = useStoreProfile(productQuery.data?.sellerId ?? '');
 
   // Cart hook — gives us `addItem` + `isAdding` loading flag.
   const { addItem, isAdding } = useCart();
@@ -494,18 +507,6 @@ export function ProductDetailPage() {
                 SKU: <span className="font-mono">{selectedVariant.sku}</span>
               </p>
             )}
-            {product.storeName && (
-              <p className="mt-1.5 text-xs text-slate-500 flex items-center gap-1">
-                <Store size={12} className="text-slate-400" aria-hidden />
-                Sold by{' '}
-                <Link
-                  to={`/store/${product.sellerId}`}
-                  className="font-medium text-slate-700 hover:text-[#002b5b] hover:underline transition-colors"
-                >
-                  {product.storeName}
-                </Link>
-              </p>
-            )}
           </div>
 
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -590,6 +591,34 @@ export function ProductDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Store info card — live below the main product layout. Drives
+       * its own `useStoreProfile` query so the seller metadata loads
+       * independently of the product detail. Hides entirely until the
+       * product has resolved (no flash of empty seller header). */}
+      <StoreInfoCard
+        sellerId={product.sellerId}
+        fallbackStoreName={product.storeName}
+        storeQuery={storeQuery}
+      />
+
+      {/* Product description card — seller-authored plain-text blob
+       * (validated at the API layer by `z.string().max(5000).trim()`).
+       * Rendered only when the description is non-empty so a seller
+       * who hasn't filled one in doesn't show an empty card. The `mt-8`
+       * vertical rhythm matches the spacing between the Store Info
+       * Card and the page wrapper below. */}
+      {product.description && product.description.trim().length > 0 && (
+        <ProductDescriptionCard description={product.description} />
+      )}
+
+      {/* Ratings & Reviews — public listing fed by GET
+       * /api/reviews/product/:id. Mounted after the description so the
+       * natural reading flow is: image + price + variants → store →
+       * description → social proof. Hides entirely while the product
+       * query is still loading (the parent page already gates on
+       * `productQuery.isPending`, so we're safe to render here). */}
+      <ProductRatings productId={product.id} />
     </div>
     </>
   );
@@ -614,6 +643,337 @@ function DetailSkeleton() {
           <Skeleton className="h-12 w-full rounded-lg" />
         </div>
       </div>
+      {/* Store info card placeholder — mirrors the size of the real
+       * card so the page doesn't jump when the data resolves. */}
+      <Skeleton className="mt-12 h-32 w-full rounded-2xl" />
+      {/* Description card placeholder — `h-64` (256px) roughly
+       * matches the height of a 4–5 line description at `text-base`.
+       * The card is conditionally rendered so this skeleton is only
+       * visible while the product query is loading; the eventual
+       * decision to show/hide the real card is driven by the
+       * description's content (see ProductDescriptionCard). */}
+      <Skeleton className="mt-8 h-64 w-full rounded-2xl" />
+      {/* Reviews placeholder — `h-96` (384px) covers the summary
+       * header + star breakdown bars + the first few review rows on
+       * a populated product. The reviews card is always rendered (no
+       * conditional guard), so this skeleton is always present while
+       * loading. */}
+      <Skeleton className="mt-8 h-96 w-full rounded-2xl" />
     </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Store info card — surfaces the seller's public storefront profile
+ * below the main product layout.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** Type alias for the `useStoreProfile` query result. Centralised so
+ * the `StoreInfoCard` prop type stays in sync with the hook. */
+type StoreQueryResult = ReturnType<typeof useStoreProfile>;
+
+interface StoreInfoCardProps {
+  sellerId: string;
+  /** Denormalised store name from the product payload. Used as a
+   * fallback while the seller profile is still loading, so the
+   * "View Shop" link is never blank. */
+  fallbackStoreName?: string | null;
+  storeQuery: StoreQueryResult;
+}
+
+/**
+ * Render a polished "Store Info Card" with two distinct areas:
+ *   • Left   — store identity (avatar + name + "View Shop" CTA).
+ *   • Right  — store stats grid (joined date, product count, contact).
+ *
+ * The card degrades gracefully:
+ *   • Loading state → left shows the denormalised `product.storeName`
+ *     immediately + a small spinner; right shows skeletons.
+ *   • Error state → "--" placeholders for the right-side stats so the
+ *     layout is preserved (matches the user's "Products: -- / Joined:
+ *     --" placeholder request).
+ *   • Loaded state → full store profile rendered with the resolved
+ *     fields. Fields the seller hasn't set (`phone`, `address`) are
+ *     omitted from the grid so we don't show 4 "Unknown" rows.
+ */
+function StoreInfoCard({
+  sellerId,
+  fallbackStoreName,
+  storeQuery,
+}: StoreInfoCardProps) {
+  // Treat the seller profile as still loading until the query has
+  // resolved once — `isPending` (TanStack Query v5) is true only on
+  // the very first fetch, so background refetches don't trigger a
+  // flash of "—".
+  const store = storeQuery.data;
+  const isLoading = storeQuery.isPending;
+  const isError = storeQuery.isError;
+
+  // Display name: prefer the resolved store name, fall back to the
+  // denormalised product payload, then a generic "This shop".
+  const displayName =
+    store?.storeName?.trim() ||
+    fallbackStoreName?.trim() ||
+    'This shop';
+
+  // First letter, uppercased, used as the avatar fallback when the
+  // seller hasn't uploaded a logo. Strip emoji / non-letter chars so
+  // the fallback doesn't render a black box.
+  const initial = displayName
+    .replace(/^[^\p{L}\p{N}]+/u, '')
+    .charAt(0)
+    .toUpperCase() || '?';
+
+  // Stats grid entries. Each entry is conditionally rendered based on
+  // whether the seller has populated the underlying field — we don't
+  // show empty rows for missing data (cleaner, less "Unknown" noise).
+  //
+  // Icons are size {16} (one step up from the previous 14) so the
+  // stroke weight keeps visual parity with the upcoming `text-sm`
+  // labels and `text-base` values. Belt-and-braces colour the icon
+  // container directly so a future caller can pass any icon without
+  // also being responsible for tinting it.
+  const statEntries: Array<{ icon: React.ReactNode; label: string; value: string }> = [];
+  if (store) {
+    if (store.joinedAt) {
+      statEntries.push({
+        icon: <CalendarDays size={16} aria-hidden />,
+        label: 'Joined',
+        value: formatJoinedDate(store.joinedAt),
+      });
+    }
+    statEntries.push({
+      icon: <Package size={16} aria-hidden />,
+      label: 'Products',
+      value: isLoading ? '--' : String(store.productCount ?? 0),
+    });
+    if (store.supportEmail) {
+      statEntries.push({
+        icon: <Mail size={16} aria-hidden />,
+        label: 'Email',
+        value: store.supportEmail,
+      });
+    }
+    if (store.phone) {
+      statEntries.push({
+        icon: <Phone size={16} aria-hidden />,
+        label: 'Phone',
+        value: store.phone,
+      });
+    }
+    if (store.address) {
+      statEntries.push({
+        icon: <MapPin size={16} aria-hidden />,
+        label: 'Address',
+        value: store.address,
+      });
+    }
+  } else if (isError) {
+    // No data + error → show "—" placeholders so the card layout
+    // still communicates the existence of the seller (and the View
+    // Shop button still works, since we already have the sellerId).
+    statEntries.push(
+      { icon: <CalendarDays size={16} aria-hidden />, label: 'Joined', value: '--' },
+      { icon: <Package size={16} aria-hidden />, label: 'Products', value: '--' },
+    );
+  } else {
+    // Loading state — show skeleton rows so the right side doesn't
+    // pop in empty when the data resolves.
+    statEntries.push(
+      { icon: <CalendarDays size={16} aria-hidden />, label: 'Joined', value: '--' },
+      { icon: <Package size={16} aria-hidden />, label: 'Products', value: '--' },
+    );
+  }
+
+  return (
+    <section
+      aria-label="Store information"
+      className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mt-12"
+    >
+      <div className="flex flex-col md:flex-row gap-8 md:gap-12 items-center md:items-stretch">
+        {/* Left side: identity + CTA. Vertical divider on desktop so the
+         * two halves read as distinct units without a heavier border.
+         *
+         * `md:min-w-[280px]` keeps the identity block from collapsing
+         * to its content width (which left a huge empty gutter on the
+         * far right of the card). Combined with `md:flex-none` and
+         * `md:border-r md:pr-8`, the left column now occupies a
+         * predictable slice of the card while the right-side stats grid
+         * `flex-1`-expands to fill the remainder. */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-6 md:min-w-[280px] md:border-r md:border-slate-200 md:pr-8 md:flex-none">
+          <StoreAvatar
+            logoUrl={store?.logoUrl ?? null}
+            initial={initial}
+            isLoading={isLoading}
+          />
+          {/* `justify-center` vertically centers the name + View Shop
+           * button against the avatar now that the small "Sold &
+           * shipped by" label has been removed. Without it the
+           * column was top-aligned relative to the avatar's height. */}
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left gap-3 justify-center">
+            <h2 className="text-lg font-bold text-slate-900 leading-tight">
+              {displayName}
+            </h2>
+            <Link
+              to={`/store/${sellerId}`}
+              className="inline-flex items-center justify-center border border-[#002b5b] text-[#002b5b] px-4 py-2 rounded-lg font-medium hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2 transition-colors"
+            >
+              View Shop
+            </Link>
+          </div>
+        </div>
+
+        {/* Right side: stats grid. `flex-1` so it expands to fill the
+         * remaining card width. `md:pl-8` pushes the grid away from
+         * the divider so the items don't crowd the vertical rule.
+         *
+         * Columns: 2 on tablet, 3 on `lg+`. With up to 5 stats
+         * (Joined / Products / Email / Phone / Address) this wraps
+         * as 3 + 2 on wide screens — far better use of the horizontal
+         * real estate than the previous 2 + 2 + 1. `gap-x-12 gap-y-6`
+         * gives each stat a comfortable breathing room. */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-6 md:pl-8 flex-1 w-full">
+          {statEntries.map((entry) => (
+            <div
+              key={entry.label}
+              className="flex items-start gap-2 min-w-0"
+            >
+              <span className="mt-1 text-slate-400 shrink-0">
+                {entry.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm text-slate-500">{entry.label}</p>
+                <p className="text-base font-medium text-slate-800 truncate" title={entry.value}>
+                  {isLoading ? (
+                    <span className="inline-block h-5 w-16 rounded bg-slate-100 animate-pulse" />
+                  ) : (
+                    entry.value
+                  )}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Store avatar — falls back to a gradient tile with the first letter
+ * of the store name when the seller has no logo uploaded.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+function StoreAvatar({
+  logoUrl,
+  initial,
+  isLoading,
+}: {
+  logoUrl: string | null;
+  initial: string;
+  isLoading: boolean;
+}) {
+  // While the store profile is still loading we don't know whether
+  // there's a logo — render a neutral skeleton the same size as the
+  // avatar so the layout doesn't shift.
+  if (isLoading && !logoUrl) {
+    return (
+      <div
+        aria-hidden
+        className="h-16 w-16 rounded-full bg-slate-100 animate-pulse shrink-0"
+      />
+    );
+  }
+
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        // Lazy-load: the avatar is below the fold of the main product
+        // grid for most viewport sizes, so eager loading would waste
+        // bandwidth on the hero image above.
+        loading="lazy"
+        className="h-16 w-16 rounded-full object-cover shrink-0 ring-2 ring-slate-100"
+      />
+    );
+  }
+
+  // Fallback: gradient tile with the first letter of the store name.
+  // The hero background (`from-[#002b5b] to-[#1a4480]`) mirrors the
+  // brand navy used elsewhere on the page so the card feels part of
+  // the same design system.
+  return (
+    <div
+      aria-hidden
+      className="h-16 w-16 rounded-full bg-gradient-to-br from-[#002b5b] to-[#1a4480] flex items-center justify-center text-white text-xl font-bold shrink-0"
+    >
+      {initial}
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Helpers
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Format an ISO joined-date as a short month + year (e.g. "Mar 2024").
+ * Defensive: an invalid date string falls back to "--" so a bad
+ * payload can't crash the page.
+ */
+function formatJoinedDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '--';
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Product description card — renders the seller-authored product
+ * description below the Store Info Card.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+interface ProductDescriptionCardProps {
+  description: string;
+}
+
+/**
+ * Render the product description in a dedicated card.
+ *
+ * Text formatting: the backend stores descriptions as **plain text**
+ * (validated by `z.string().max(5000).trim()` in `product.dto.ts` —
+ * no HTML sanitization, no rich-text schema). Two implications:
+ *
+ *   1. We render the text as-is inside a `<div>` rather than piping
+ *      it through `dangerouslySetInnerHTML`. The seller can include
+ *      line breaks (paragraph spacing, lists of features) and we
+ *      preserve them. If the schema ever evolves to support HTML we
+ *      would swap this for a `prose` container here.
+ *
+ *   2. `whitespace-pre-wrap` preserves newlines from the source
+ *      (each `\n` becomes a real line break) while still collapsing
+ *      runs of whitespace the way HTML normally does, so the text
+ *      is readable AND respects the seller's paragraph structure.
+ *
+ * The card is intentionally hidden by the caller when the
+ * description is empty/whitespace-only — we don't render a
+ * "Product Description" heading over an empty body.
+ */
+function ProductDescriptionCard({ description }: ProductDescriptionCardProps) {
+  // `pre-wrap` keeps the user's intentional newlines, `break-words`
+  // prevents a single extra-long URL/no-spaces string from blowing
+  // out the card width on narrow viewports.
+  return (
+    <section
+      aria-label="Product description"
+      className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm mt-8"
+    >
+      <h2 className="text-xl font-bold text-slate-800 mb-6">
+        Product Description
+      </h2>
+      <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-base break-words">
+        {description}
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { OrderRepository } from "./order.repository";
-import { OrderEntity } from "./order.entity";
+import { OrderEntity, type OrderStatus } from "./order.entity";
 import {
   CreateOrderDto,
   UpdateOrderStatusDto,
@@ -240,11 +240,47 @@ export class OrderService {
     };
   }
 
+  /**
+   * Lightweight count of orders grouped by status for the current
+   * customer. Used by the `MyOrdersPage` tab bar so every tab can
+   * render its count without a separate paginated fetch per tab.
+   *
+   * No pagination / role filtering — the repo method is purpose-built
+   * to be a single GROUP BY round-trip.
+   */
+  async getOrderCounts(
+    userId: string,
+    role: string,
+  ): Promise<Record<OrderStatus, number>> {
+    // Sellers don't currently have a tab bar in the buyer UI, but
+    // returning the same shape keeps the controller simple — the
+    // repository's `findBySellerId` doesn't need counts, so for the
+    // seller path we just return an empty map. If a seller dashboard
+    // wants counts later, the repo can be extended symmetrically.
+    if (role === "seller") {
+      return {
+        pending: 0,
+        confirmed: 0,
+        shipping: 0,
+        delivered: 0,
+        cancelled: 0,
+        failed: 0,
+      };
+    }
+    return this.orderRepository.countByStatus(userId);
+  }
+
   async getMyOrders(
     userId: string,
     role: string,
     page: number = 1,
     limit: number = 10,
+    /**
+     * Optional status filter. When supplied, the controller must have
+     * already validated it against the `OrderStatus` enum (see
+     * `OrderController.getMyOrders`). `null` / undefined means "all".
+     */
+    status?: OrderStatus,
   ): Promise<{
     orders: OrderEntity[];
     total: number;
@@ -253,8 +289,8 @@ export class OrderService {
   }> {
     const result =
       role === "seller"
-        ? await this.orderRepository.findBySellerId(userId, page, limit)
-        : await this.orderRepository.findByCustomerId(userId, page, limit);
+        ? await this.orderRepository.findBySellerId(userId, page, limit, status)
+        : await this.orderRepository.findByCustomerId(userId, page, limit, status);
 
     return { ...result, page, limit };
   }

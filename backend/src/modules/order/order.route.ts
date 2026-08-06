@@ -29,6 +29,17 @@ export const createOrderRouter = (controller: OrderController) => {
     controller.getMyOrders,
   );
 
+  // Lightweight counts grouped by status. Used by the buyer's tab bar
+  // so every tab can render its count without 6 paginated fetches.
+  // Mounted BEFORE `/:id` so the literal `counts` path isn't matched
+  // as an order id (Express dispatches by exact route match, but
+  // listing it earlier reads more naturally).
+  router.get(
+    "/counts",
+    requireRole("customer", "seller", "admin"),
+    controller.getOrderCounts,
+  );
+
   // Get 1 order
   router.get(
     "/:id",

@@ -18,6 +18,7 @@ import { createDashboardRouter } from "./modules/dashboard/dashboard.route";
 import { createSellerRouter } from "./modules/seller/seller.route";
 import { createNotificationRouter } from "./modules/notification/notification.route";
 import { createUserAddressRouter } from "./modules/address/address.route";
+import { createReviewRouter } from "./modules/review/review.route";
 
 const app: Application = express();
 
@@ -76,6 +77,7 @@ const dashboardController = container.resolve("dashboardController");
 const sellerController = container.resolve("sellerController");
 const notificationController = container.resolve("notificationController");
 const userAddressController = container.resolve("userAddressController");
+const reviewController = container.resolve("reviewController");
 
 // Initialize uploads/ directory when server starts
 const uploadService = container.resolve("uploadService");
@@ -94,6 +96,7 @@ app.use("/api/seller/dashboard", createDashboardRouter(dashboardController));
 app.use("/api/seller", createSellerRouter(sellerController));
 app.use("/api/notifications", createNotificationRouter(notificationController));
 app.use("/api/user/addresses", createUserAddressRouter(userAddressController));
+app.use("/api/reviews", createReviewRouter(reviewController));
 
 app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({ status: "OK", message: "App is running!" });

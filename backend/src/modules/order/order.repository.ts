@@ -214,12 +214,57 @@ export class OrderRepository {
     return true;
   }
 
+  /**
+   * Compute the count of orders for this customer, grouped by status.
+   * Used by the `MyOrdersPage` tab bar so every tab can render its
+   * count without a separate paginated fetch per tab.
+   *
+   * Returns all 6 statuses (including `failed`) so the wire shape is
+   * stable; the frontend can ignore statuses it doesn't show as tabs.
+   */
+  async countByStatus(
+    customerId: string,
+  ): Promise<Record<OrderStatus, number>> {
+    // Single GROUP BY query — avoids 6 separate count() calls. The
+    // existing `idx_orders_customer_id` index covers the WHERE; the
+    // GROUP BY is cheap because there are only 6 status values.
+    const rows = await this.prisma.order.groupBy({
+      by: ["status"],
+      where: { customerId },
+      _count: { _all: true },
+    });
+
+    // Seed every status with 0 so the response always has all keys —
+    // a tab with no orders in that bucket still reads as 0, not
+    // `undefined`, which simplifies the frontend's tab rendering.
+    const counts: Record<OrderStatus, number> = {
+      pending: 0,
+      confirmed: 0,
+      shipping: 0,
+      delivered: 0,
+      cancelled: 0,
+      failed: 0,
+    };
+    for (const row of rows) {
+      counts[row.status as OrderStatus] = row._count._all;
+    }
+    return counts;
+  }
+
   async findByCustomerId(
     customerId: string,
     page: number,
     limit: number,
+    status?: OrderStatus,
   ): Promise<{ orders: OrderEntity[]; total: number }> {
-    const where = { customerId };
+    // Compose the where-clause: filter by customer + (optionally) status.
+    // Using a spread keeps the `status` field omitted entirely from the
+    // query when not supplied, which is important because the existing
+    // `idx_orders_status` index only fires when the column matches.
+    const where: Prisma.OrderWhereInput = {
+      customerId,
+      ...(status ? { status } : {}),
+    };
     const [total, rows] = await Promise.all([
       this.prisma.order.count({ where }),
       this.prisma.order.findMany({
@@ -247,8 +292,12 @@ export class OrderRepository {
     sellerId: string,
     page: number,
     limit: number,
+    status?: OrderStatus,
   ): Promise<{ orders: OrderEntity[]; total: number }> {
-    const where = { sellerId };
+    const where: Prisma.OrderWhereInput = {
+      sellerId,
+      ...(status ? { status } : {}),
+    };
     const [total, rows] = await Promise.all([
       this.prisma.order.count({ where }),
       this.prisma.order.findMany({

@@ -156,13 +156,13 @@ export function StoreProfilePage() {
                   {/* Products */}
                   <div className="flex items-start gap-3">
                     <Package
-                      size={16}
+                      size={18}
                       className="mt-0.5 shrink-0 text-slate-400"
                       aria-hidden
                     />
                     <div>
-                      <dt className="text-slate-400">Products</dt>
-                      <dd className="mt-0.5 font-semibold text-white">
+                      <dt className="text-slate-300">Products</dt>
+                      <dd className="mt-0.5 text-base font-medium text-white">
                         {store.productCount === 1
                           ? "1 item"
                           : `${store.productCount.toLocaleString()} items`}
@@ -174,13 +174,13 @@ export function StoreProfilePage() {
                   {store.joinedAt && (
                     <div className="flex items-start gap-3">
                       <CalendarDays
-                        size={16}
+                        size={18}
                         className="mt-0.5 shrink-0 text-slate-400"
                         aria-hidden
                       />
                       <div>
-                        <dt className="text-slate-400">Joined</dt>
-                        <dd className="mt-0.5 font-semibold text-white">
+                        <dt className="text-slate-300">Joined</dt>
+                        <dd className="mt-0.5 text-base font-medium text-white">
                           {new Intl.DateTimeFormat("en-US", {
                             month: "short",
                             year: "numeric",
@@ -194,13 +194,13 @@ export function StoreProfilePage() {
                   {store.address && (
                     <div className="flex items-start gap-3">
                       <MapPin
-                        size={16}
+                        size={18}
                         className="mt-0.5 shrink-0 text-slate-400"
                         aria-hidden
                       />
                       <div className="min-w-0">
-                        <dt className="text-slate-400">Address</dt>
-                        <dd className="mt-0.5 font-semibold text-white break-words">
+                        <dt className="text-slate-300">Address</dt>
+                        <dd className="mt-0.5 text-base font-medium text-white break-words">
                           {store.address}
                         </dd>
                       </div>
@@ -211,13 +211,13 @@ export function StoreProfilePage() {
                   {store.phone && (
                     <div className="flex items-start gap-3">
                       <Phone
-                        size={16}
+                        size={18}
                         className="mt-0.5 shrink-0 text-slate-400"
                         aria-hidden
                       />
                       <div className="min-w-0">
-                        <dt className="text-slate-400">Phone</dt>
-                        <dd className="mt-0.5 font-semibold text-white break-all">
+                        <dt className="text-slate-300">Phone</dt>
+                        <dd className="mt-0.5 text-base font-medium text-white break-all">
                           {store.phone}
                         </dd>
                       </div>
@@ -228,13 +228,13 @@ export function StoreProfilePage() {
                   {store.supportEmail && (
                     <div className="flex items-start gap-3">
                       <Mail
-                        size={16}
+                        size={18}
                         className="mt-0.5 shrink-0 text-slate-400"
                         aria-hidden
                       />
                       <div className="min-w-0">
-                        <dt className="text-slate-400">Email</dt>
-                        <dd className="mt-0.5 font-semibold text-white break-all">
+                        <dt className="text-slate-300">Email</dt>
+                        <dd className="mt-0.5 text-base font-medium text-white break-all">
                           {store.supportEmail}
                         </dd>
                       </div>

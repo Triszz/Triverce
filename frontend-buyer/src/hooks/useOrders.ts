@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import {
   orderService,
   type OrderPublic,
+  type OrderCounts,
   type CancelOrderPayload,
 } from '@/services/orderService';
 
@@ -22,10 +23,12 @@ import {
 
 export const orderKeys = {
   all: () => ['orders'] as const,
-  list: (params: { page: number; limit: number }) =>
-    [...orderKeys.all(), 'list', params.page, params.limit] as const,
+  list: (params: { page: number; limit: number; status?: string }) =>
+    [...orderKeys.all(), 'list', params.page, params.limit, params.status ?? 'all'] as const,
   detail: (orderId: string) =>
     [...orderKeys.all(), 'detail', orderId] as const,
+  /** Per-status counts for the tab bar. Single cache entry. */
+  counts: () => [...orderKeys.all(), 'counts'] as const,
 };
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -35,17 +38,23 @@ export const orderKeys = {
 export interface UseOrderListArgs {
   page?: number;
   limit?: number;
+  /** Optional status filter (mirrors `ListOrdersParams.status`). */
+  status?: OrderPublic['status'];
   enabled?: boolean;
 }
 
 export function useOrderList({
   page = 1,
   limit = 10,
+  status,
   enabled = true,
 }: UseOrderListArgs = {}) {
   return useQuery({
-    queryKey: orderKeys.list({ page, limit }),
-    queryFn: () => orderService.list({ page, limit }),
+    // The status filter is part of the key so each tab has its own cache.
+    // Switching tabs doesn't force a refetch if the data is still fresh
+    // for that tab — it just hits the cache for the other segment.
+    queryKey: orderKeys.list({ page, limit, status }),
+    queryFn: () => orderService.list({ page, limit, status }),
     enabled,
     // `keepPreviousData` keeps the previous list on screen while the next
     // page is loading, so the user doesn't see a flash of skeletons.
@@ -84,6 +93,10 @@ export function useCancelOrder() {
       // Then any list query — invalidate the whole namespace so paginated
       // lists re-fetch their data with the new status.
       queryClient.invalidateQueries({ queryKey: orderKeys.all() });
+      // Counts cache too — the cancelled bucket goes up, the
+      // previous-status bucket goes down. One refetch rebuilds the
+      // entire tab-bar count set instead of patching per bucket.
+      queryClient.invalidateQueries({ queryKey: orderKeys.counts() });
     },
     [queryClient],
   );
@@ -126,4 +139,24 @@ export function useCancelOrder() {
     isCancelling: mutation.isPending,
     error: mutation.error,
   };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * useOrderCounts — per-status counts for the MyOrdersPage tab bar.
+ *
+ * Single fetch on mount → every tab pill renders its count without
+ * triggering 6 paginated list calls. Shares the `orderKeys.counts()`
+ * cache entry, so anywhere that needs the counts can subscribe
+ * without redundant fetches.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+export function useOrderCounts() {
+  return useQuery<OrderCounts>({
+    queryKey: orderKeys.counts(),
+    queryFn: () => orderService.getCounts(),
+    // Counts change whenever an order's status flips (placed, paid,
+    // cancelled, etc.). The MyOrdersPage UI already invalidates this
+    // key after cancel; a 30s staleTime covers the read-only case.
+    staleTime: 30_000,
+  });
 }

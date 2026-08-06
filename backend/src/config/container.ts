@@ -40,6 +40,9 @@ import { NotificationController } from "../modules/notification/notification.con
 import { UserAddressRepository } from "../modules/address/address.repository";
 import { UserAddressService } from "../modules/address/address.service";
 import { UserAddressController } from "../modules/address/address.controller";
+import { ReviewRepository } from "../modules/review/review.repository";
+import { ReviewService } from "../modules/review/review.service";
+import { ReviewController } from "../modules/review/review.controller";
 import { MoMoAdapter } from "../modules/payment/adapters/momo.adapter";
 import { VNPayAdapter } from "../modules/payment/adapters/vnpay.adapter";
 
@@ -123,6 +126,10 @@ export interface ICradle {
   addressRepository: UserAddressRepository;
   addressService: UserAddressService;
   addressController: UserAddressController;
+  // Reviews
+  reviewRepository: ReviewRepository;
+  reviewService: ReviewService;
+  reviewController: ReviewController;
 }
 
 const container = createContainer<ICradle>({
@@ -197,6 +204,13 @@ container.register({
   addressService: asClass(UserAddressService).scoped(),
   userAddressController: asClass(UserAddressController).scoped(),
   addressController: asClass(UserAddressController).scoped(),
+  // Reviews — ReviewService takes a `prisma` parameter in its constructor
+  // for the order-item / order lookup chain. Awilix CLASSIC mode
+  // resolves constructor params by name, so the registered `prisma`
+  // value is wired in automatically.
+  reviewRepository: asClass(ReviewRepository).scoped(),
+  reviewService: asClass(ReviewService).scoped(),
+  reviewController: asClass(ReviewController).scoped(),
 });
 
 export { container };

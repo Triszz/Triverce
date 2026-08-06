@@ -33,27 +33,34 @@ export function OrderItemRow({ item, className }: OrderItemRowProps) {
     >
       {/* Product + SKU — left-aligned, ~50% of row width */}
       <td className="w-1/2 py-4 px-5 align-top">
-        <p className="text-sm font-medium text-slate-900 leading-snug">
+        {/* Bumped from text-sm font-medium → text-base font-semibold
+         * so the product name is the dominant line in the row. */}
+        <p className="text-base font-semibold text-slate-900 leading-snug">
           {item.productName}
         </p>
-        <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-slate-500">
-          <Hash size={10} aria-hidden />
+        {/* SKU bumped from text-[11px] → text-xs so it reads at the
+         * same scale as the rest of the row's meta info. Icon size
+         * bumped 10→12 to stay proportional. */}
+        <p className="mt-1.5 inline-flex items-center gap-1 text-xs text-slate-500">
+          <Hash size={12} aria-hidden />
           <span className="font-mono">{item.variantSku}</span>
         </p>
       </td>
 
-      {/* Quantity — right-aligned */}
-      <td className="py-4 px-5 align-top text-right text-sm text-slate-700 tabular-nums whitespace-nowrap">
+      {/* Quantity — right-aligned. Bumped text-sm → text-base. */}
+      <td className="py-4 px-5 align-top text-right text-base text-slate-700 tabular-nums whitespace-nowrap">
         ×{item.quantity}
       </td>
 
-      {/* Unit price — right-aligned, muted */}
-      <td className="py-4 px-5 align-top text-right text-sm text-slate-500 tabular-nums whitespace-nowrap">
+      {/* Unit price — right-aligned, muted. text-sm → text-base. */}
+      <td className="py-4 px-5 align-top text-right text-base text-slate-500 tabular-nums whitespace-nowrap">
         {formatVND(item.unitPrice)}
       </td>
 
-      {/* Subtotal — right-aligned, bolder */}
-      <td className="py-4 px-5 align-top text-right text-sm font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+      {/* Subtotal — right-aligned, bolder.
+       * text-sm font-semibold → text-base font-bold so it reads
+       * as the row's terminal "total" line. */}
+      <td className="py-4 px-5 align-top text-right text-base font-bold text-slate-900 tabular-nums whitespace-nowrap">
         {formatVND(item.subtotal)}
       </td>
     </tr>
