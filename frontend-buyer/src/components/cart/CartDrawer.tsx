@@ -1,11 +1,13 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Loader2, LogIn } from 'lucide-react';
+import { ShoppingBag, Loader2, LogIn, Store } from 'lucide-react';
 import { SlideOver } from '@/components/ui/SlideOver';
 import { useCart } from '@/hooks/useCart';
 import { useUiStore } from '@/stores/useUiStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { CartItemRow } from './CartItemRow';
 import { CartSummary } from './CartSummary';
+import { groupCartItemsByStore, isUnknownStoreGroup } from '@/features/cart/cartGrouping';
 
 /**
  * CartDrawer — slide-over panel that lists the user's cart.
@@ -20,6 +22,18 @@ export function CartDrawer() {
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { cart, totalItems, isLoading, isError } = useCart();
+
+  /*
+   * Group the cart items by seller so the drawer mirrors the
+   * Cart Page layout. Bucketing happens once per render — keyed
+   * on the `cart.items` array reference (which is stable across
+   * re-renders unless the cart actually changed) so React
+   * Compiler can preserve the manual memoisation.
+   */
+  const storeGroups = useMemo(
+    () => groupCartItemsByStore(cart?.items ?? []),
+    [cart?.items],
+  );
 
   /* ── Body scroll lock with side-effect ──────────────────────────────── */
 
@@ -53,16 +67,57 @@ export function CartDrawer() {
       ) : !cart || cart.items.length === 0 ? (
         <EmptyCart onClose={close} />
       ) : (
-        <ul role="list" className="px-5 divide-y divide-slate-100">
-          {cart.items.map((item) => (
-            <CartItemRow
-              key={item.id}
-              item={item}
-              compact
-              onNavigate={close}
-            />
+        <div className="px-5 py-2">
+          {/*
+           * Multi-vendor layout: one compact block per store.
+           * Each block has a small store header (icon + name) and
+           * then the items, separated by a top-and-bottom divider
+           * so the user can scan the drawer store-by-store.
+           */}
+          {storeGroups.map((group) => (
+            <section key={group.storeKey} className="py-2">
+              <header className="flex items-center gap-2 text-sm font-semibold text-slate-800 bg-slate-50 p-2 border-y">
+                <Store size={14} className="text-slate-500 shrink-0" aria-hidden />
+                {/*
+                 * Store name is a deep link to the store profile
+                 * when the seller is known. Items ending up in the
+                 * "Unknown store" bucket (the product/seller join
+                 * failed server-side) render as plain text — there's
+                 * no profile to navigate to in that case.
+                 *
+                 * The hover state (underline + brand colour)
+                 * signals clickability without changing the layout
+                 * (text-decoration shift would shift the row).
+                 */}
+                {isUnknownStoreGroup(group) ? (
+                  <span className="truncate">{group.storeName}</span>
+                ) : (
+                  <Link
+                    to={`/store/${group.sellerId}`}
+                    onClick={close}
+                    className="truncate hover:underline hover:text-[#002b5b] transition-colors"
+                  >
+                    {group.storeName}
+                  </Link>
+                )}
+                <span className="ml-auto text-xs font-medium text-slate-500 tabular-nums">
+                  {group.items.length}{' '}
+                  {group.items.length === 1 ? 'item' : 'items'}
+                </span>
+              </header>
+              <ul role="list" className="divide-y divide-slate-100">
+                {group.items.map((item) => (
+                  <CartItemRow
+                    key={item.id}
+                    item={item}
+                    compact
+                    onNavigate={close}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       {/* Footer-area "View full cart" link (only when items present) */}

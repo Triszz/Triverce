@@ -16,6 +16,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageMeta } from '@/components/common/PageMeta';
@@ -71,6 +72,13 @@ export function AccountPage() {
           description="Sign in to view and manage your Triverce account."
         />
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          {/* Breadcrumb — Home → My Account. Rendered in the
+           * unauthenticated branch too so users hitting /account
+           * without a session still see the trail they came from. */}
+          <Breadcrumbs
+            crumbs={[{ label: 'Home', path: '/' }, { label: 'My Account' }]}
+            className="mb-6"
+          />
           <EmptyState
             tone="brand"
             icon={<LogIn size={24} aria-hidden />}
@@ -101,6 +109,14 @@ export function AccountPage() {
       />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        {/* Breadcrumb — Home → My Account. Placed at the very top
+         * of the main page container, directly above the 'My
+         * account' heading, with `mb-6` to separate it from the
+         * header row. */}
+        <Breadcrumbs
+          crumbs={[{ label: 'Home', path: '/' }, { label: 'My Account' }]}
+          className="mb-6"
+        />
         {/* Header */}
         <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
           <div>

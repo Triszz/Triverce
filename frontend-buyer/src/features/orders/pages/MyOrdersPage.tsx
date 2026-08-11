@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Package, ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageMeta } from "@/components/common/PageMeta";
 import { OrderCard } from "@/components/order/OrderCard";
@@ -117,6 +118,13 @@ export function MyOrdersPage() {
       <>
         <PageMeta title="My orders" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          {/* Breadcrumb — Home → My Orders. Rendered in the
+           * loading branch too so users navigating directly to
+           * /orders see the trail immediately, before data lands. */}
+          <Breadcrumbs
+            crumbs={[{ label: "Home", path: "/" }, { label: "My Orders" }]}
+            className="mb-6"
+          />
           <header className="mb-6">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
               My Orders
@@ -167,6 +175,12 @@ export function MyOrdersPage() {
       <>
         <PageMeta title="My orders" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          {/* Breadcrumb — Home → My Orders. Placed at the very top
+           * of the container, above the page title. */}
+          <Breadcrumbs
+            crumbs={[{ label: "Home", path: "/" }, { label: "My Orders" }]}
+            className="mb-6"
+          />
           <header className="mb-6">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
               My Orders
@@ -231,6 +245,14 @@ export function MyOrdersPage() {
         description="Track, view, and manage your Triverce purchases."
       />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Breadcrumb — Home → My Orders. Placed at the very top
+         * of the page container, directly above the 'My Orders'
+         * heading, with `mb-6` to separate it from the header row. */}
+        <Breadcrumbs
+          crumbs={[{ label: "Home", path: "/" }, { label: "My Orders" }]}
+          className="mb-6"
+        />
+
         {/* Header */}
         <header className="mb-6 flex items-end justify-between gap-4">
           <div>

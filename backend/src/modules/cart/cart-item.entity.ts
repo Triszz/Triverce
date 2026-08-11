@@ -19,6 +19,13 @@ export class CartItemEntity {
     // Inventory for stock-limit UI
     public readonly inventoryQuantity?: number,
     public readonly inventoryReserved?: number,
+
+    // Storefront grouping (multi-vendor cart). Populated from the
+    // joined `product` row so the buyer UI can group items by store
+    // without re-fetching each variant's product. `storeName` is
+    // optional because sellers may not have set one yet.
+    public readonly sellerId?: string,
+    public readonly storeName?: string | null,
   ) {}
 
   /** Quantity available to the customer (total minus reserved). */
@@ -51,6 +58,11 @@ export class CartItemEntity {
   /**
    * Adapter from a `CartItem` row joined with variant + product details.
    * Fields with `| null | undefined` come from optional joins.
+   *
+   * `sellerStoreName` is passed separately rather than typed on the
+   * `product` row because the Prisma `Product` model doesn't expose
+   * the seller relationship here — the join to `product.seller` is
+   * layered in `cart.repository.ts` so the entity stays Prisma-agnostic.
    */
   static fromDatabase(
     row: CartItem & {
@@ -58,6 +70,8 @@ export class CartItemEntity {
       variantProduct?: Product | null;
       inventoryQuantity?: number | null;
       inventoryReserved?: number | null;
+      /** `product.seller.storeName` — passed through by the repository. */
+      sellerStoreName?: string | null;
     },
   ): CartItemEntity {
     const variant = row.variant ?? null;
@@ -76,6 +90,10 @@ export class CartItemEntity {
       variant?.imageUrl,
       row.inventoryQuantity ?? undefined,
       row.inventoryReserved ?? undefined,
+      // `sellerId` comes from the product row (FK on the product),
+      // `storeName` is pulled from the joined seller record.
+      product?.sellerId,
+      row.sellerStoreName ?? null,
     );
   }
 
@@ -91,6 +109,12 @@ export class CartItemEntity {
       imageUrl: this.variantImageUrl,
       subtotal: this.subtotal,
       availableStock: this.availableStock,
+      // Multi-vendor grouping fields. Both are optional in the
+      // cart-item entity so previously-created carts (or items
+      // whose product row couldn't be joined) survive the upgrade
+      // without breaking the public API.
+      sellerId: this.sellerId,
+      storeName: this.storeName,
       updatedAt: this.updatedAt,
     };
   }

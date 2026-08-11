@@ -149,19 +149,39 @@ export class CartRepository {
       where: { cartId },
       include: {
         variant: {
-          include: { product: true, inventory: true },
+          // `product.seller` is included so the cart item can be
+          // grouped by store in the buyer UI. Selecting only the
+          // fields we need (`sellerId`, `storeName`) keeps the row
+          // narrow — a full `User` row would carry password hashes
+          // and other sensitive data.
+          include: {
+            product: {
+              include: {
+                seller: { select: { storeName: true } },
+              },
+            },
+            inventory: true,
+          },
         },
       },
       orderBy: { createdAt: "asc" },
     });
 
-    return rows.map((row) =>
-      CartItemEntity.fromDatabase({
+    return rows.map((row) => {
+      const product = row.variant?.product ?? null;
+      // Pulled from `product.seller` (joined on the variant's product).
+      // Typed loosely because Prisma's `Product` model doesn't expose
+      // the seller relationship in this include chain.
+      const seller = (product as unknown as {
+        seller?: { storeName?: string | null } | null;
+      } | null)?.seller;
+      return CartItemEntity.fromDatabase({
         ...row,
-        variantProduct: row.variant?.product ?? null,
+        variantProduct: product,
         inventoryQuantity: row.variant?.inventory?.quantity,
         inventoryReserved: row.variant?.inventory?.reserved,
-      }),
-    );
+        sellerStoreName: seller?.storeName ?? null,
+      });
+    });
   }
 }

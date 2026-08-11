@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Store } from 'lucide-react';
-import type { ProductSummary } from '@/services/productService';
-import { pickHeroImage } from '@/services/productService';
-import { PriceTag } from '@/components/ui/PriceTag';
-import { cn } from '@/lib/cn';
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Store } from "lucide-react";
+import type { ProductSummary } from "@/services/productService";
+import { pickHeroImage } from "@/services/productService";
+import { PriceTag } from "@/components/ui/PriceTag";
+import { cn } from "@/lib/cn";
 
 /**
  * Neutral 1:1 placeholder used when a product has no image yet.
@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn';
  * card's `rounded-xl` shape.
  */
 function PlaceholderImage({ name }: { name: string }) {
-  const initial = name.trim().charAt(0).toUpperCase() || '?';
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
   return (
     <div
       role="img"
@@ -53,10 +53,10 @@ export function ProductCard({ product, className }: ProductCardProps) {
   return (
     <div
       className={cn(
-        'group block bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden',
-        'transition-all duration-200 ease-out',
-        'hover:shadow-md hover:-translate-y-0.5 hover:border-slate-200',
-        'focus-within:ring-2 focus-within:ring-[#002b5b] focus-within:ring-offset-2',
+        "group block bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden",
+        "transition-all duration-200 ease-out",
+        "hover:shadow-md hover:-translate-y-0.5 hover:border-slate-200",
+        "focus-within:ring-2 focus-within:ring-[#002b5b] focus-within:ring-offset-2",
         className,
       )}
     >
@@ -75,9 +75,9 @@ export function ProductCard({ product, className }: ProductCardProps) {
               loading="lazy"
               onError={() => setImgError(true)}
               className={cn(
-                'h-full w-full object-cover',
-                'transition-transform duration-300 ease-out',
-                'group-hover:scale-105',
+                "h-full w-full object-cover",
+                "transition-transform duration-300 ease-out",
+                "group-hover:scale-105",
               )}
             />
           )}
@@ -92,10 +92,10 @@ export function ProductCard({ product, className }: ProductCardProps) {
       <div className="p-4 space-y-2">
         {product.storeName && (
           <p
-            className="text-xs font-medium text-slate-500 truncate flex items-center gap-1"
+            className="text-sm font-medium text-slate-500 truncate flex items-center gap-1"
             title={product.storeName}
           >
-            <Store size={11} className="shrink-0 text-slate-400" aria-hidden />
+            <Store size={12} className="shrink-0 text-slate-400" aria-hidden />
             <Link
               to={`/store/${product.sellerId}`}
               className="hover:text-[#002b5b] hover:underline transition-colors"
@@ -105,7 +105,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </p>
         )}
 
-        <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2">
+        <h3 className="text-base font-semibold text-slate-900 leading-snug line-clamp-2">
           <Link
             to={`/product/${product.slug}`}
             aria-label={`View ${product.name}`}
@@ -121,7 +121,11 @@ export function ProductCard({ product, className }: ProductCardProps) {
             <>
               <PriceTag value={product.minPrice} size="md" />
               <span className="text-xs text-slate-400">–</span>
-              <PriceTag value={product.maxPrice} size="sm" className="text-slate-500" />
+              <PriceTag
+                value={product.maxPrice}
+                size="sm"
+                className="text-slate-500"
+              />
             </>
           ) : (
             <PriceTag value={product.minPrice} size="md" />

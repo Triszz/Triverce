@@ -50,9 +50,40 @@ export class OrderService {
     if (!cart || cart.items.length === 0)
       throw new BadRequestError("Cart is empty");
 
+    // Multi-vendor cart selection — when the buyer calls checkout
+    // with `cartItemIds`, only the selected items are charged and
+    // turned into orders. The rest of the cart stays put so the
+    // buyer can come back and checkout the remaining items later.
+    // The cart's status remains `active` (we don't flip it to
+    // `checked_out` because the cart still has items in it).
+    //
+    // IDs that don't belong to THIS cart are silently dropped — the
+    // cart page only ever shows its own items, so an ID mismatch
+    // here means stale state (e.g. the user removed an item in
+    // another tab). Dropping rather than 400'ing keeps the UX
+    // graceful: the user just gets a checkout for whatever is still
+    // there.
+    let checkoutItems = cart.items;
+    if (dto.cartItemIds !== undefined) {
+      if (dto.cartItemIds.length === 0) {
+        throw new BadRequestError(
+          "No cart items selected for checkout",
+        );
+      }
+      const allowedIds = new Set(cart.items.map((i) => i.id));
+      checkoutItems = cart.items.filter((i) =>
+        allowedIds.has(i.id) && dto.cartItemIds!.includes(i.id),
+      );
+      if (checkoutItems.length === 0) {
+        throw new BadRequestError(
+          "Selected items are no longer in your cart",
+        );
+      }
+    }
+
     // Group items by sellerId
-    const sellerGroups = new Map<string, typeof cart.items>();
-    for (const item of cart.items) {
+    const sellerGroups = new Map<string, typeof checkoutItems>();
+    for (const item of checkoutItems) {
       const sellerId = await this.getSellerIdByVariantId(item.variantId);
       if (!sellerGroups.has(sellerId)) sellerGroups.set(sellerId, []);
       sellerGroups.get(sellerId)!.push(item);
@@ -169,12 +200,31 @@ export class OrderService {
         }
       }
 
-      // Mark cart as checked_out and clear items.
-      await this.cartRepository.clearItems(cart.id, trx);
-      await trx.cart.update({
-        where: { id: cart.id },
-        data: { status: "checked_out" },
-      });
+      // Post-checkout cleanup.
+      //
+      //   • Full-cart checkout (no `cartItemIds`) — every item has
+      //     been ordered, so clear the cart and flip its status to
+      //     `checked_out`. The next call to `findActiveByUserId`
+      //     will create a fresh empty cart.
+      //
+      //   • Partial checkout (with `cartItemIds`) — only the
+      //     selected items have been ordered. Remove those rows so
+      //     the buyer can see the remaining items still waiting,
+      //     and keep the cart in `active` status so they can come
+      //     back and checkout the rest without a re-login.
+      if (dto.cartItemIds === undefined) {
+        await this.cartRepository.clearItems(cart.id, trx);
+        await trx.cart.update({
+          where: { id: cart.id },
+          data: { status: "checked_out" },
+        });
+      } else {
+        const orderedIds = checkoutItems.map((i) => i.id);
+        await trx.cartItem.deleteMany({
+          where: { cartId: cart.id, id: { in: orderedIds } },
+        });
+        // Cart stays `active` — the buyer still has items in it.
+      }
 
       // Auto-save the shipping address if it's not already in the user's
       // address book. Runs inside the same transaction so the save and the

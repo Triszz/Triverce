@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Navigate, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ShoppingBag, LogIn, ChevronLeft, Lock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -15,9 +15,9 @@ import {
 } from '@/features/checkout/OrderSummary';
 import { PageMeta } from '@/components/common/PageMeta';
 import {
-  deriveShippingFee,
   formatVND,
 } from '@/features/checkout/checkout.types';
+import { computePerStoreShipping } from '@/features/cart/cartGrouping';
 import { AddressBook } from '@/features/address/components/AddressBook';
 import { useAddresses } from '@/features/address/hooks/useAddresses';
 import { useCreateAddress } from '@/features/address/hooks/useAddresses';
@@ -46,9 +46,30 @@ const RETURN_PATH = '/checkout/return';
 
 export function CheckoutPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { cart, totalPrice, isLoading: isCartLoading, isError } = useCart();
+  const { cart, isLoading: isCartLoading, isError } = useCart();
   const navigate = useNavigate();
   const openCartDrawer = useUiStore((s) => s.openCartDrawer);
+  const [searchParams] = useSearchParams();
+
+  /**
+   * Multi-vendor cart selection — when the user clicked "Checkout"
+   * from the cart with only some items ticked, the cart page
+   * forwards the chosen IDs as `?items=id1,id2,…`. The checkout
+   * page reads this once and forwards the IDs to `POST /orders`
+   * so the backend only charges the selection.
+   *
+   * If the query string is missing or empty, the entire cart is
+   * checked out (legacy single-shot behaviour).
+   */
+  const selectedItemIds = useMemo<string[] | undefined>(() => {
+    const raw = searchParams.get('items');
+    if (!raw) return undefined;
+    const ids = raw
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
+    return ids.length > 0 ? ids : undefined;
+  }, [searchParams]);
 
   const [gateway, setGateway] = useState<CheckoutGateway>('vnpay');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,9 +81,35 @@ export function CheckoutPage() {
 
   /* ── Derived ─────────────────────────────────────────────────────────── */
 
-  const items = cart?.items ?? [];
-  const subtotal = totalPrice;
-  const shipping = useMemo(() => deriveShippingFee(subtotal), [subtotal]);
+  const allItems = useMemo(() => cart?.items ?? [], [cart?.items]);
+  /*
+   * When the buyer arrived with a selection, the checkout line
+   * items AND the subtotal are restricted to the selection
+   * only — the rest of the cart stays put for later. We surface
+   * a banner so the user knows they're checking out a subset.
+   */
+  const items = useMemo(() => {
+    if (!selectedItemIds) return allItems;
+    if (selectedItemIds.length === 0) return allItems;
+    const allowed = new Set(selectedItemIds);
+    return allItems.filter((i) => allowed.has(i.id));
+  }, [allItems, selectedItemIds]);
+  const isPartialCheckout = selectedItemIds !== undefined;
+  const subtotal = useMemo(
+    () => items.reduce((s, i) => s + (i.subtotal ?? 0), 0),
+    [items],
+  );
+  /*
+   * Shipping follows the multi-vendor policy — per-store fees
+   * summed. The single shared helper (`computePerStoreShipping`)
+   * keeps this page in lockstep with the cart and the drawer: a
+   * buyer who reviews the cart totals on `/cart` sees the exact
+   * same number on `/checkout`.
+   */
+  const shipping = useMemo(
+    () => computePerStoreShipping(items).totalShipping,
+    [items],
+  );
   const total = subtotal + shipping;
 
   /* ── URL helpers ─────────────────────────────────────────────────────── */
@@ -105,6 +152,10 @@ export function CheckoutPage() {
         gateway,
         returnUrl: provisionalUrls.returnUrl,
         cancelUrl: provisionalUrls.cancelUrl,
+        // Multi-vendor cart selection — when supplied, only the
+        // selected IDs are turned into orders. Omitted for the
+        // full-cart checkout path.
+        cartItemIds: selectedItemIds,
       });
 
       // 2) Branch on gateway.
@@ -272,6 +323,24 @@ export function CheckoutPage() {
             View cart
           </button>
         </div>
+
+        {/*
+         * Partial-checkout banner. Shown only when the buyer
+         * arrived from the cart with a subset of items selected.
+         * The remaining items stay in the cart — the user can
+         * come back to checkout them later.
+         */}
+        {isPartialCheckout && (
+          <div
+            role="status"
+            className="mb-6 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-800"
+          >
+            You&apos;re checking out {items.length} of {allItems.length}{' '}
+            {allItems.length === 1 ? 'item' : 'items'} from your cart. The
+            remaining {allItems.length - items.length} will stay in your cart
+            for later.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── Left column: address book + gateway picker ────────────────── */}

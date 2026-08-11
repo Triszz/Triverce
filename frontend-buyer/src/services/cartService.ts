@@ -21,6 +21,21 @@ export interface CartItemPublic {
   subtotal: number;
   /** Available quantity: total inventory minus reserved stock. Used to enforce stock limits on the UI. */
   availableStock?: number;
+  /**
+   * Multi-vendor grouping fields exposed by the cart API.
+   *
+   * `sellerId` identifies the storefront an item ships from. Cart
+   * items with the same `sellerId` are grouped together in the UI
+   * (Shopee/Amazon-style multi-vendor layout). `storeName` is the
+   * seller's display name; it may be `null` if the seller hasn't
+   * set one yet.
+   *
+   * Both are optional so older carts (or items whose product row
+   * couldn't be joined) degrade gracefully — the UI falls back to a
+   * "Unknown store" bucket.
+   */
+  sellerId?: string;
+  storeName?: string | null;
   updatedAt: string;
 }
 

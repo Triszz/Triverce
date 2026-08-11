@@ -11,6 +11,18 @@ export const CreateOrderSchema = z.object({
   gateway: z.enum(["momo", "stripe", "vnpay", "cod"]).default("momo"),
   returnUrl: z.url(),
   cancelUrl: z.url(),
+  /**
+   * Optional list of cart-item IDs to checkout. When supplied, the
+   * service restricts the checkout to only these items (the rest of
+   * the cart stays untouched so the buyer can come back for them
+   * later). When omitted, the entire active cart is checked out —
+   * preserving the pre-multi-vendor behaviour.
+   *
+   * Each ID must be a UUID; max 100 items per request is a loose
+   * sanity check that prevents a runaway payload from DoS'ing the
+   * server.
+   */
+  cartItemIds: z.array(z.uuid()).max(100).optional(),
 });
 
 export const UpdateOrderStatusSchema = z.object({

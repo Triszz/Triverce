@@ -60,6 +60,18 @@ export interface CreateOrderPayload {
   gateway: CheckoutGateway;
   returnUrl: string;
   cancelUrl: string;
+  /**
+   * Optional list of cart-item IDs the buyer chose to checkout.
+   *
+   * When supplied, the backend only orders these items and leaves
+   * the rest in the cart (cart stays `active`). When omitted, the
+   * entire active cart is checked out — preserving the original
+   * single-shot behaviour.
+   *
+   * The cart page sends this once the user has ticked the items
+   * they want to buy on the multi-vendor cart.
+   */
+  cartItemIds?: string[];
 }
 
 /** Response shape for `POST /orders`. */
