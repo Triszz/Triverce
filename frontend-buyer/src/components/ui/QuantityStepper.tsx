@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Minus, Plus, Loader2 } from 'lucide-react';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { cn } from '@/lib/cn';
 
 export interface QuantityStepperProps {
@@ -31,6 +30,20 @@ export interface QuantityStepperProps {
  *
  * `max` enforces a hard stock limit on the UI: the '+' button is disabled
  * and the input clamps at `max` so no API call can ever exceed available stock.
+ *
+ * ── Architecture ────────────────────────────────────────────────────────────
+ *
+ * API calls are triggered ONLY from event handlers (click, blur), never from
+ * a `useEffect`. This eliminates the feedback loop that caused the cart
+ * quantity to oscillate after the EditCartItemModal updated the backend:
+ *
+ *   Modal closes → cart refetches → `value` prop changes → stale useEffect
+ *   fires a pending debounced call with the OLD `onCommit` identity → wrong
+ *   API payload → cart refetches again → loop.
+ *
+ * The prop-sync effect (resetting `draft` when `value` changes) is safe
+ * because nothing listens to `draft` to trigger `onCommit` — `draft` only
+ * controls the visual display.
  */
 export function QuantityStepper({
   value,
@@ -41,47 +54,90 @@ export function QuantityStepper({
   onCommitError,
   className,
 }: QuantityStepperProps) {
-  // null = user hasn't touched it; render `value` directly.
-  // Once they touch anything, keep a local draft until a successful
-  // commit aligns it back with the upstream value.
+  // `draft` is the local "uncommitted" state while the user is interacting.
+  // `null` means the user has not touched it; `value` (the prop) is displayed.
   const [draft, setDraft] = useState<number | null>(null);
   const display = draft ?? value;
 
-  const debounced = useDebouncedValue(display, 400);
-
-  // Keep the latest `onCommit` in a ref so we don't depend on its identity
-  // inside the commit effect (avoiding the "refs during render" rule).
+  // Keep the latest `onCommit` in a ref so debounced closures always call the
+  // current version without needing it as a dependency.
   const onCommitRef = useRef(onCommit);
   useEffect(() => {
     onCommitRef.current = onCommit;
   }, [onCommit]);
 
+  // Stable debounce timer. Resetting it cancels any pending call, so only
+  // the LAST interaction within the 400 ms window fires the API.
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Wraps `onCommit` with debounce + error handling. The function itself is
+  // stable (no reactive deps), so `useCallback` gives us a stable identity
+  // regardless of when the parent re-renders.
+  const scheduleCommit = useCallback(
+    (next: number) => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        void Promise.resolve(onCommitRef.current(next)).catch(() => {
+          setDraft(null);
+          onCommitError();
+        });
+      }, 400);
+    },
+    // Empty deps: `onCommitRef` and `onCommitError` are always current at call
+    // time (refs are read, not depended on), so this function's identity is
+    // stable and the debounce timer is reset ONLY by user interactions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Cleanup: cancel any pending debounce when the component unmounts.
   useEffect(() => {
-    if (debounced === value) return;
-    if (!Number.isFinite(debounced)) return;
-    const next = Math.min(max, Math.max(1, Math.trunc(debounced)));
-    if (next === value) return;
-    onCommitRef.current(next);
-  }, [debounced, value, max]);
+    return () => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  /*
+   * Safe prop sync — reset draft when the external `value` changes.
+   *
+   * This effect is safe because it ONLY writes to `draft`. There is no effect
+   * listening to `draft` to trigger `onCommit`, so syncing the prop to local
+   * state can never cause an accidental API call.
+   */
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setDraft(null); }, [value]);
 
   const dec = () => {
-    if (display <= 1) return;
+    if (disabled || display <= 1) return;
     const next = display - 1;
     setDraft(next);
-    void Promise.resolve(onCommit(next)).catch(() => {
-      setDraft(null);
-      onCommitError();
-    });
+    scheduleCommit(next);
   };
 
   const inc = () => {
-    if (display >= max) return;
+    if (disabled || display >= max) return;
     const next = Math.min(display + 1, max);
     setDraft(next);
-    void Promise.resolve(onCommit(next)).catch(() => {
-      setDraft(null);
-      onCommitError();
-    });
+    scheduleCommit(next);
+  };
+
+  const handleBlur = () => {
+    if (display < 1 || display > max) {
+      const next = Math.min(max, Math.max(1, Math.trunc(display)));
+      setDraft(next);
+      scheduleCommit(next);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const parsed = Number(e.target.value);
+    setDraft(Number.isFinite(parsed) ? parsed : null);
   };
 
   return (
@@ -110,17 +166,8 @@ export function QuantityStepper({
         max={max}
         value={display}
         disabled={disabled}
-        onChange={(e) => {
-          const parsed = Number(e.target.value);
-          setDraft(Number.isFinite(parsed) ? parsed : null);
-        }}
-        onBlur={() => {
-          if (display < 1 || display > max) {
-            const next = Math.min(max, Math.max(1, Math.trunc(display)));
-            setDraft(next);
-            onCommit(next);
-          }
-        }}
+        onChange={handleChange}
+        onBlur={handleBlur}
         aria-label="Quantity"
         className="h-8 w-12 text-center text-sm font-medium text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-[#002b5b]/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />

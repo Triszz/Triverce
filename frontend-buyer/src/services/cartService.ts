@@ -9,6 +9,12 @@ import apiClient from './apiClient';
  * ──────────────────────────────────────────────────────────────────────── */
 
 /** Shape returned by `cart/items` endpoints. */
+export interface VariantAttribute {
+  attributeId: string;
+  attributeName: string;
+  value: string;
+}
+
 export interface CartItemPublic {
   id: string;
   variantId: string;
@@ -36,6 +42,12 @@ export interface CartItemPublic {
    */
   sellerId?: string;
   storeName?: string | null;
+  /**
+   * Variant attributes (e.g. Color, Size) so the cart and checkout
+   * UI can display exactly which SKU the buyer selected. `null` when
+   * no attributes are defined (simple product with a single variant).
+   */
+  attributes: VariantAttribute[] | null;
   updatedAt: string;
 }
 
@@ -55,9 +67,11 @@ export interface AddCartItemPayload {
   quantity: number;
 }
 
-/** Payload accepted by `PATCH /cart/items/:itemId` (mirrors `UpdateCartItemDto`). */
+/** Payload accepted by `PATCH /cart/items/:itemId` (mirrors `UpdateCartItemDto`).
+ *  `variantId` is optional — include it only when swapping the selected SKU. */
 export interface UpdateCartItemPayload {
   quantity: number;
+  variantId?: string;
 }
 
 interface ApiSuccess<T> {

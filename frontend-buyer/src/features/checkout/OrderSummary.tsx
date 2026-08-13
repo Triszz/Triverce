@@ -3,6 +3,7 @@ import { Package, ShoppingBag, Store } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { cn } from '@/lib/cn';
+import type { CartItemPublic } from '@/services/cartService';
 import {
   computePerStoreShipping,
   groupCartItemsByStore,
@@ -10,6 +11,16 @@ import {
   type StoreGroup,
 } from '@/features/cart/cartGrouping';
 import type { OrderSummaryProps, PlaceOrderButtonProps } from './checkout.types';
+
+/**
+ * Formats an array of variant attributes into a readable string,
+ * e.g. "Color: Matte Black, Size: M". Returns null when the
+ * array is absent or empty so callers can use it as a conditional.
+ */
+function formatVariantAttributes(attributes: CartItemPublic['attributes']): string | null {
+  if (!attributes || attributes.length === 0) return null;
+  return attributes.map((a) => `${a.attributeName}: ${a.value}`).join(', ');
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
  * OrderSummary — checkout sidebar showing what's being purchased and the
@@ -276,6 +287,12 @@ function StoreSection({ group, shippingFee }: StoreSectionProps) {
               <p className="truncate text-sm font-medium text-slate-900">
                 {item.productName ?? 'Product'}
               </p>
+              {(() => {
+                const variantStr = formatVariantAttributes(item.attributes);
+                return variantStr ? (
+                  <p className="text-sm text-slate-600 truncate">{variantStr}</p>
+                ) : null;
+              })()}
               <p className="text-xs text-slate-500">Qty {item.quantity}</p>
             </div>
             <PriceTag

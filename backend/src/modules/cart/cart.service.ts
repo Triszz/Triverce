@@ -82,6 +82,63 @@ export class CartService {
     if (!item)
       throw new NotFoundError(`Cart item with id "${cartItemId}" not found`);
 
+    const isVariantChange = dto.variantId !== undefined && dto.variantId !== item.variantId;
+
+    if (isVariantChange) {
+      // TypeScript narrows `dto.variantId` to `string` inside this block.
+      const newVariantId = dto.variantId as string;
+      /*
+       * Variant swap path:
+       *   • Validate new variant exists and has stock.
+       *   • Swap within a transaction: release old, reserve new, update FK.
+       *   • If quantity also changed, apply the qty delta on the new variant.
+       */
+      const newInventory = await this.inventoryRepository.findByVariantId(
+        newVariantId,
+      );
+      if (!newInventory)
+        throw new NotFoundError(`Variant with id "${newVariantId}" not found`);
+      if (!newInventory.available)
+        throw new BadRequestError("The selected variant is out of stock");
+
+      try {
+        await this.prisma.$transaction(async (trx) => {
+          // Release the old variant's reservation.
+          await this.inventoryRepository.release(item.variantId, item.quantity, trx);
+          // Reserve the new variant.
+          await this.inventoryRepository.reserve(newVariantId, item.quantity, trx);
+          // Swap the FK on the cart item.
+          await this.cartRepository.swapItemVariant(
+            cart.id,
+            cartItemId,
+            item.variantId,
+            newVariantId,
+            trx,
+          );
+          // If quantity also changed, update it on the new variant.
+          if (dto.quantity !== item.quantity) {
+            await this.cartRepository.updateItemQuantity(
+              cart.id,
+              cartItemId,
+              dto.quantity,
+              trx,
+            );
+          }
+        });
+      } catch (error: any) {
+        if (error?.message === "INSUFFICIENT_STOCK")
+          throw new BadRequestError("Not enough stock available for the selected variant");
+        if (error?.message === "RELEASE_FAILED")
+          throw new BadRequestError("Failed to release stock from the previous variant");
+        throw error;
+      }
+
+      return (await this.cartRepository.findActiveByUserId(userId))!;
+    }
+
+    /*
+     * Quantity-only path (original behaviour, preserved).
+     */
     const diff = dto.quantity - item.quantity;
     if (diff === 0) return cart;
 

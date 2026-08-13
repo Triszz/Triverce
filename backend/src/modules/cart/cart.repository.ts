@@ -113,6 +113,42 @@ export class CartRepository {
     }
   }
 
+  /**
+   * Swap a cart item's variant in-place, within a transaction.
+   *
+   * Steps:
+   *   1. Release inventory for the OLD variant.
+   *   2. Reserve inventory for the NEW variant.
+   *   3. Update the cart item's `variantId`.
+   *
+   * The caller (service layer) is responsible for validating that
+   * the new variant belongs to the same product and has sufficient
+   * stock before calling this method.
+   */
+  async swapItemVariant(
+    cartId: string,
+    cartItemId: string,
+    oldVariantId: string,
+    newVariantId: string,
+    trx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = trx ?? this.prisma;
+    await client.$transaction(async (tx) => {
+      await tx.inventory.update({
+        where: { variantId: oldVariantId },
+        data: { reserved: { decrement: 1 } },
+      });
+      await tx.inventory.update({
+        where: { variantId: newVariantId },
+        data: { reserved: { increment: 1 } },
+      });
+      await tx.cartItem.update({
+        where: { id: cartItemId },
+        data: { variantId: newVariantId },
+      });
+    });
+  }
+
   async removeItem(
     cartId: string,
     cartItemId: string,
@@ -161,6 +197,13 @@ export class CartRepository {
               },
             },
             inventory: true,
+            // Variant attributes (Color, Size, etc.) so the cart
+            // and checkout UI can display the exact SKU selected.
+            // The `attribute` join gives us the attribute name;
+            // the value is stored on the join row itself.
+            attributeValues: {
+              include: { attribute: { select: { id: true, name: true } } },
+            },
           },
         },
       },
@@ -175,12 +218,22 @@ export class CartRepository {
       const seller = (product as unknown as {
         seller?: { storeName?: string | null } | null;
       } | null)?.seller;
+      // Map the joined `attributeValues` rows to the flat
+      // `VariantAttribute` shape used by the product module and the
+      // buyer UI (attributeId + attributeName + value).
+      const variantAttributes =
+        row.variant?.attributeValues.map((av) => ({
+          attributeId: av.attributeId,
+          attributeName: av.attribute.name,
+          value: av.value,
+        })) ?? undefined;
       return CartItemEntity.fromDatabase({
         ...row,
         variantProduct: product,
         inventoryQuantity: row.variant?.inventory?.quantity,
         inventoryReserved: row.variant?.inventory?.reserved,
         sellerStoreName: seller?.storeName ?? null,
+        variantAttributes,
       });
     });
   }

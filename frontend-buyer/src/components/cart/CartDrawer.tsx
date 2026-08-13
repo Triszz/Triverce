@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Loader2, LogIn, Store } from 'lucide-react';
 import { SlideOver } from '@/components/ui/SlideOver';
@@ -7,7 +7,9 @@ import { useUiStore } from '@/stores/useUiStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { CartItemRow } from './CartItemRow';
 import { CartSummary } from './CartSummary';
+import { EditCartItemModal } from './EditCartItemModal';
 import { groupCartItemsByStore, isUnknownStoreGroup } from '@/features/cart/cartGrouping';
+import type { CartItemPublic } from '@/services/cartService';
 
 /**
  * CartDrawer — slide-over panel that lists the user's cart.
@@ -22,6 +24,12 @@ export function CartDrawer() {
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { cart, totalItems, isLoading, isError } = useCart();
+
+  /*
+   * Inline variant edit modal state.
+   * `editingItem` holds the cart item being edited; null = modal closed.
+   */
+  const [editingItem, setEditingItem] = useState<CartItemPublic | null>(null);
 
   /*
    * Group the cart items by seller so the drawer mirrors the
@@ -45,7 +53,8 @@ export function CartDrawer() {
   const meta = totalItems > 0 ? `${totalItems} ${totalItems === 1 ? 'item' : 'items'}` : null;
 
   return (
-    <SlideOver
+    <>
+      <SlideOver
       open={isOpen}
       onClose={close}
       title={title}
@@ -112,6 +121,7 @@ export function CartDrawer() {
                     item={item}
                     compact
                     onNavigate={close}
+                    onVariantEdit={setEditingItem}
                   />
                 ))}
               </ul>
@@ -133,6 +143,15 @@ export function CartDrawer() {
         </div>
       )}
     </SlideOver>
+
+    {/* Inline variant edit modal */}
+    <EditCartItemModal
+      key={editingItem?.id}
+      open={editingItem !== null}
+      item={editingItem}
+      onClose={() => setEditingItem(null)}
+    />
+    </>
   );
 }
 

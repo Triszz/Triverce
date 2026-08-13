@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { CartItemRow } from '@/components/cart/CartItemRow';
 import { CartSummary } from '@/components/cart/CartSummary';
+import { EditCartItemModal } from '@/components/cart/EditCartItemModal';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -25,6 +26,7 @@ import {
   sumSubtotals,
   type StoreGroup,
 } from '@/features/cart/cartGrouping';
+import type { CartItemPublic } from '@/services/cartService';
 import { cn } from '@/lib/cn';
 
 /**
@@ -59,6 +61,9 @@ export function CartPage() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { cart, totalItems, isLoading, isError } = useCart();
+
+  /* ── Inline variant edit modal state ──────────────────────────────── */
+  const [editingItem, setEditingItem] = useState<CartItemPublic | null>(null);
 
   /* ── Selection state ─────────────────────────────────────────────────
    *
@@ -414,6 +419,7 @@ export function CartPage() {
                 selectedShippingFee={selectedShipping.byStoreKey.get(group.storeKey) ?? 0}
                 onToggleItem={toggleItem}
                 onToggleStore={toggleStore}
+                onVariantEdit={setEditingItem}
               />
             ))}
           </section>
@@ -454,6 +460,14 @@ export function CartPage() {
           </aside>
         </div>
       </div>
+
+      {/* Inline variant edit modal */}
+      <EditCartItemModal
+        key={editingItem?.id}
+        open={editingItem !== null}
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+      />
     </>
   );
 }
@@ -482,6 +496,7 @@ interface StoreCardProps {
   selectedShippingFee: number;
   onToggleItem: (itemId: string) => void;
   onToggleStore: (storeKey: string, storeItemIds: string[]) => void;
+  onVariantEdit: (item: CartItemPublic) => void;
 }
 
 function StoreCard({
@@ -490,6 +505,7 @@ function StoreCard({
   selectedShippingFee,
   onToggleItem,
   onToggleStore,
+  onVariantEdit,
 }: StoreCardProps) {
   const storeItemIds = useMemo(() => group.items.map((i) => i.id), [group.items]);
   const selectedInStore = storeItemIds.filter((id) => selectedIds.has(id)).length;
@@ -586,6 +602,7 @@ function StoreCard({
             <CartItemRow
               item={item}
               className="pl-8 sm:pl-10"
+              onVariantEdit={onVariantEdit}
             />
           </li>
         ))}

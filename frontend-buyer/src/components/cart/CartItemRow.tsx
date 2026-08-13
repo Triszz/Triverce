@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Loader2 } from 'lucide-react';
+import { ChevronDown, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { Button } from '@/components/ui/Button';
@@ -18,6 +18,12 @@ export interface CartItemRowProps {
   /** When true, render a more compact layout suitable for the side-drawer. */
   compact?: boolean;
   /**
+   * Fired when the user clicks the variant button on the cart item.
+   * Receives the full cart item so the parent can open the edit modal.
+   * Only invoked when `compact === true` (cart interfaces — NOT checkout).
+   */
+  onVariantEdit?: (item: CartItemPublic) => void;
+  /**
    * Fired when the user clicks an in-row navigation link (e.g. the
    * product name). The Cart Drawer passes its `close` so the slide-over
    * doesn't obscure the destination page after navigation.
@@ -27,10 +33,21 @@ export interface CartItemRowProps {
 }
 
 /**
+ * Formats an array of variant attributes into a readable string,
+ * e.g. "Color: Matte Black, Size: M". Returns null when the
+ * array is absent or empty so callers can use it as a conditional.
+ */
+function formatVariantAttributes(attributes: CartItemPublic['attributes']): string | null {
+  if (!attributes || attributes.length === 0) return null;
+  return attributes.map((a) => `${a.attributeName}: ${a.value}`).join(', ');
+}
+
+/**
  * CartItemRow — single line item used by both the slide-over drawer and
  * the full-page cart. Renders:
  *   • Thumbnail (linked to product detail if a slug is known)
- *   • Product name + variant SKU
+ *   • Product name + variant attributes (interactive variant button on
+ *     cart interfaces; plain text on checkout OrderSummary)
  *   • Quantity stepper (debounced)
  *   • Subtotal (price × qty)
  *   • Remove button (uses optimistic remove from useCart)
@@ -38,6 +55,7 @@ export interface CartItemRowProps {
 export function CartItemRow({
   item,
   compact = false,
+  onVariantEdit,
   onNavigate,
   className,
 }: CartItemRowProps) {
@@ -116,6 +134,30 @@ export function CartItemRow({
                 {item.sku}
               </p>
             )}
+            {(() => {
+              const variantStr = formatVariantAttributes(item.attributes);
+              return variantStr ? (
+                compact ? (
+                  // Interactive variant button — cart interfaces only.
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onVariantEdit?.(item);
+                    }}
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md text-sm text-slate-700 transition-colors mt-0.5"
+                    aria-label={`Change variant: ${variantStr}`}
+                  >
+                    <span className="truncate max-w-[200px]">{variantStr}</span>
+                    <ChevronDown size={12} className="shrink-0 text-slate-400" aria-hidden />
+                  </button>
+                ) : (
+                  // Plain text — checkout OrderSummary.
+                  <p className="text-sm text-slate-600 mt-0.5 truncate">{variantStr}</p>
+                )
+              ) : null;
+            })()}
           </div>
 
           {!compact && (

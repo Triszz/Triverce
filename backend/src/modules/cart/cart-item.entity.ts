@@ -1,4 +1,5 @@
-import type { CartItem, Inventory, ProductVariant, Product } from "@prisma/client";
+import type { CartItem, ProductVariant, Product } from "@prisma/client";
+import type { VariantAttribute } from "../product/product-variant.entity";
 
 export class CartItemEntity {
   constructor(
@@ -26,6 +27,11 @@ export class CartItemEntity {
     // optional because sellers may not have set one yet.
     public readonly sellerId?: string,
     public readonly storeName?: string | null,
+
+    // Variant attributes (e.g. Color, Size) — joined from
+    // `product_variants.attributes` so the cart / checkout UI can
+    // display exactly which SKU the buyer selected.
+    public readonly variantAttributes?: VariantAttribute[],
   ) {}
 
   /** Quantity available to the customer (total minus reserved). */
@@ -52,6 +58,15 @@ export class CartItemEntity {
       row.quantity,
       row.createdAt,
       row.updatedAt,
+      undefined, // variantSku
+      undefined, // variantPrice
+      undefined, // productName
+      undefined, // productSlug
+      undefined, // variantImageUrl
+      undefined, // inventoryQuantity
+      undefined, // inventoryReserved
+      undefined, // sellerId
+      undefined, // storeName
     );
   }
 
@@ -72,6 +87,8 @@ export class CartItemEntity {
       inventoryReserved?: number | null;
       /** `product.seller.storeName` — passed through by the repository. */
       sellerStoreName?: string | null;
+      /** Mapped attribute values already resolved by the repository. */
+      variantAttributes?: VariantAttribute[];
     },
   ): CartItemEntity {
     const variant = row.variant ?? null;
@@ -94,6 +111,8 @@ export class CartItemEntity {
       // `storeName` is pulled from the joined seller record.
       product?.sellerId,
       row.sellerStoreName ?? null,
+      // Variant attributes (e.g. Color, Size) for cart/checkout display.
+      row.variantAttributes,
     );
   }
 
@@ -115,6 +134,9 @@ export class CartItemEntity {
       // without breaking the public API.
       sellerId: this.sellerId,
       storeName: this.storeName,
+      // Variant attributes (e.g. Color, Size) so the cart and
+      // checkout UI can display exactly which SKU was selected.
+      attributes: this.variantAttributes ?? null,
       updatedAt: this.updatedAt,
     };
   }
