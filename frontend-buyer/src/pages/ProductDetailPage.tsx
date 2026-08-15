@@ -16,6 +16,7 @@ import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
+import { ZoomableLightbox } from '@/components/ui/ZoomableLightbox';
 import { PageMeta } from '@/components/common/PageMeta';
 import { cn } from '@/lib/cn';
 import {
@@ -107,6 +108,10 @@ export function ProductDetailPage() {
   // quantity stepper's `onCommit`) and reset effects (see below).
   // No bare setState calls live in the render body.
   const [quantity, setQuantity] = useState(1);
+  // Toggle for the full-screen <ZoomableLightbox> overlay. The lightbox
+  // is mounted conditionally at the bottom of the component so it
+  // portals over the entire page (including the existing layout).
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   const product = productQuery.data ?? null;
 
@@ -412,18 +417,25 @@ export function ProductDetailPage() {
         <div className="space-y-3">
           <div className="aspect-square overflow-hidden rounded-2xl bg-slate-50 border border-slate-100 shadow-sm">
             {heroImage ? (
-              <img
-                key={heroImage /* force re-mount on image swap */}
-                src={heroImage}
-                alt={product.name}
-                // The hero is the LCP element on this page — load it
-                // eagerly with high priority. Lazy-loading the LCP
-                // image hurts both LCP and Lighthouse.
-                loading="eager"
-                fetchPriority="high"
-                decoding="async"
-                className="h-full w-full object-cover transition-opacity duration-300"
-              />
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(true)}
+                aria-label={`Zoom product image: ${product.name}`}
+                className="block w-full h-full cursor-zoom-in hover:opacity-90 transition-opacity"
+              >
+                <img
+                  key={heroImage /* force re-mount on image swap */}
+                  src={heroImage}
+                  alt={product.name}
+                  // The hero is the LCP element on this page — load it
+                  // eagerly with high priority. Lazy-loading the LCP
+                  // image hurts both LCP and Lighthouse.
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+              </button>
             ) : (
               <div className="h-full w-full flex items-center justify-center text-slate-300 text-7xl font-semibold">
                 {product.name.charAt(0).toUpperCase()}
@@ -619,6 +631,19 @@ export function ProductDetailPage() {
        * query is still loading (the parent page already gates on
        * `productQuery.isPending`, so we're safe to render here). */}
       <ProductRatings productId={product.id} />
+
+      {/* Full-screen zoom overlay — reused from the cart modal. The `key`
+       * remounts the component on every open, which gives us a fresh
+       * 1x / centred view without needing an effect to reset state. */}
+      {heroImage && (
+        <ZoomableLightbox
+          key={isLightboxOpen ? 'open' : 'closed'}
+          src={heroImage}
+          alt={product.name}
+          open={isLightboxOpen}
+          onClose={() => setIsLightboxOpen(false)}
+        />
+      )}
     </div>
     </>
   );

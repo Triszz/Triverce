@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Modal } from '@/components/ui/Modal';
@@ -6,141 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { ZoomableLightbox } from '@/components/ui/ZoomableLightbox';
 import { VariantPicker } from '@/features/catalog/components/VariantPicker';
 import { buildAttributeAxes } from '@/features/catalog/components/variantUtils';
 import { productService, type ProductVariant } from '@/services/productService';
 import { cartService, type CartItemPublic } from '@/services/cartService';
 import { cartKeys } from '@/hooks/useCart';
-
-/* ──────────────────────────────────────────────────────────────────────────
- * ZoomableLightbox — full-screen image viewer with scroll-to-zoom + drag-pan
- * ──────────────────────────────────────────────────────────────────────── */
-
-interface ZoomableLightboxProps {
-  src: string;
-  alt: string;
-  open: boolean;
-  onClose: () => void;
-}
-
-const ZoomableLightbox = ({ src, alt, open, onClose }: ZoomableLightboxProps) => {
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-
-  // Reset view by remounting the lightbox on every open via `key` (no need
-  // to clear state in an effect — a fresh instance starts at 1x by default).
-
-  // Close on Escape. Stop the event from bubbling/reaching other listeners
-  // (notably the parent `<Modal>`'s keydown handler) so Esc only closes the
-  // lightbox and not the modal underneath it.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const clampScale = (next: number) => Math.min(Math.max(1, next), 5);
-
-  const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
-    // Wheel up zooms in, wheel down zooms out. Each notch ≈ ±0.25x.
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.25 : 0.25;
-    setScale((prev) => clampScale(prev + delta));
-  };
-
-  const handleMouseDown = (e: MouseEvent<HTMLImageElement>) => {
-    if (scale <= 1) return;
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || scale <= 1) return;
-    setPosition((prev) => ({
-      x: prev.x + e.movementX,
-      y: prev.y + e.movementY,
-    }));
-  };
-
-  const endDrag = () => setIsDragging(false);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Zoomed product image"
-      className="fixed inset-0 z-[100] bg-white/70 backdrop-blur-xl flex items-center justify-center"
-      onMouseMove={handleMouseMove}
-      onMouseUp={endDrag}
-      onMouseLeave={endDrag}
-      onWheel={handleWheel}
-      onClick={(e) => {
-        // Click on backdrop closes; image clicks are reserved for drag-to-pan.
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close zoom"
-        className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-slate-900/5 hover:bg-slate-200/60 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.25"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M18 6 6 18" />
-          <path d="m6 6 12 12" />
-        </svg>
-      </button>
-
-      {/* Clip overflow so a zoomed-in image never escapes the viewport edges. */}
-      <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-8">
-        <img
-          src={src}
-          alt={alt}
-          draggable={false}
-          onMouseDown={handleMouseDown}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-            transition: isDragging ? 'none' : 'transform 200ms ease-out',
-          }}
-          className={
-            'max-h-full max-w-full object-contain select-none ' +
-            (isDragging
-              ? 'cursor-grabbing'
-              : scale > 1
-                ? 'cursor-grab'
-                : 'cursor-zoom-in')
-          }
-        />
-      </div>
-
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-700 bg-white/60 border border-slate-200/80 px-3 py-1.5 rounded-full pointer-events-none shadow-sm">
-        Scroll to zoom · Drag to pan · Esc to close
-      </div>
-    </div>
-  );
-};
 
 /* ──────────────────────────────────────────────────────────────────────────
  * EditCartItemModal
