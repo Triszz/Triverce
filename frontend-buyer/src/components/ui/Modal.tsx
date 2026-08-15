@@ -20,8 +20,16 @@ export interface ModalProps {
   title?: ReactNode;
   /** Right-aligned header element (e.g. close button override). */
   meta?: ReactNode;
-  /** Width of the panel. `sm` ≈ 24rem, `md` ≈ 28rem, `lg` ≈ 32rem. */
-  size?: 'sm' | 'md' | 'lg';
+  /**
+   * Width of the panel.
+   *   `sm`  ≈ 24rem (384px)
+   *   `md`  ≈ 28rem (448px)
+   *   `lg`  ≈ 32rem (512px)
+   *   `xl`  ≈ 36rem (576px)
+   *   `2xl` ≈ 42rem (672px)
+   *   `3xl` ≈ 48rem (768px)
+   */
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   /** Body content. */
   children: ReactNode;
   /** Optional footer pinned to the bottom of the panel. */
@@ -35,6 +43,9 @@ const SIZE: Record<NonNullable<ModalProps['size']>, string> = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+  '3xl': 'max-w-3xl',
 };
 
 export function Modal({

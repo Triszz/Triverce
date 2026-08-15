@@ -20,7 +20,11 @@ export interface CartItemRowProps {
   /**
    * Fired when the user clicks the variant button on the cart item.
    * Receives the full cart item so the parent can open the edit modal.
-   * Only invoked when `compact === true` (cart interfaces — NOT checkout).
+   *
+   * Presence of this prop controls whether the variant attribute is
+   * rendered as an interactive button or as plain text:
+   *   • `onVariantEdit` provided  → interactive button (cart surfaces)
+   *   • `onVariantEdit` omitted   → plain text (checkout OrderSummary)
    */
   onVariantEdit?: (item: CartItemPublic) => void;
   /**
@@ -46,8 +50,8 @@ function formatVariantAttributes(attributes: CartItemPublic['attributes']): stri
  * CartItemRow — single line item used by both the slide-over drawer and
  * the full-page cart. Renders:
  *   • Thumbnail (linked to product detail if a slug is known)
- *   • Product name + variant attributes (interactive variant button on
- *     cart interfaces; plain text on checkout OrderSummary)
+ *   • Product name + variant attributes (interactive variant button when
+ *     `onVariantEdit` is provided; plain text on checkout OrderSummary)
  *   • Quantity stepper (debounced)
  *   • Subtotal (price × qty)
  *   • Remove button (uses optimistic remove from useCart)
@@ -129,32 +133,29 @@ export function CartItemRow({
                 {item.productName ?? 'Product'}
               </p>
             )}
-            {item.sku && (
-              <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                {item.sku}
-              </p>
-            )}
             {(() => {
               const variantStr = formatVariantAttributes(item.attributes);
               return variantStr ? (
-                compact ? (
-                  // Interactive variant button — cart interfaces only.
+                onVariantEdit ? (
+                  // Interactive variant button — any cart surface that
+                  // wires up the edit modal (cart drawer, cart page).
                   <button
                     type="button"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      onVariantEdit?.(item);
+                      onVariantEdit(item);
                     }}
-                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md text-sm text-slate-700 transition-colors mt-0.5"
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md text-sm text-slate-700 transition-colors mt-2 cursor-pointer"
                     aria-label={`Change variant: ${variantStr}`}
                   >
                     <span className="truncate max-w-[200px]">{variantStr}</span>
                     <ChevronDown size={12} className="shrink-0 text-slate-400" aria-hidden />
                   </button>
                 ) : (
-                  // Plain text — checkout OrderSummary.
-                  <p className="text-sm text-slate-600 mt-0.5 truncate">{variantStr}</p>
+                  // Plain text — checkout OrderSummary, where editing
+                  // the variant mid-checkout is not supported.
+                  <p className="text-sm text-slate-600 mt-2 truncate">{variantStr}</p>
                 )
               ) : null;
             })()}
