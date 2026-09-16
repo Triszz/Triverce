@@ -169,7 +169,28 @@ export function CartItemRow({
         <div className="flex items-center justify-between gap-3 pt-1">
           <QuantityStepper
             value={item.quantity}
-            max={item.availableStock}
+            /*
+             * `max` — the absolute upper bound for this item.
+             *
+             * `item.availableStock` is the number of units the
+             * customer can STILL ADD (total inventory minus reserved
+             * minus what's already in their cart). It shrinks as the
+             * cart grows, which is exactly the wrong shape for an
+             * upper bound on the stepper: clicking `+` at the
+             * boundary would push `max` down and the next `-` click
+             * would `clamp(...)` the user's pending value back to
+             * the new (lower) ceiling — a confusing "snap" bug.
+             *
+             * The real invariant:
+             *   total inventory = cart quantity + remaining available
+             * So the absolute max the customer can dial this item to
+             * is `quantity + availableStock` — a constant for as long
+             * as no other customer reserves units in parallel. The
+             * backend's hard cap (100) is already enforced inside
+             * QuantityStepper via `BACKEND_QUANTITY_CAP`, so we just
+             * pass the right number here.
+             */
+            max={item.quantity + item.availableStock}
             onCommit={handleCommit}
             onCommitError={() => {
               // No-op: the stepper resets its own draft to `null` on
