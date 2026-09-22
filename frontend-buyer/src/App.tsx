@@ -137,6 +137,20 @@ function App() {
               </Suspense>
             }
           />
+          {/*
+            Category-scoped catalog. Same component as `/shop` so the two
+            surfaces share a single rendering pipeline — the page reads
+            `:categorySlug` via `useParams` and pre-filters the grid.
+            The shop's canonical URL is now the slug-based form.
+          */}
+          <Route
+            path="/category/:categorySlug"
+            element={
+              <Suspense fallback={<PageSuspense />}>
+                <ShopPage />
+              </Suspense>
+            }
+          />
           <Route
             path="/product/:productId"
             element={

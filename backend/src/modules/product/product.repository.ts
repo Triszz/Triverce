@@ -57,7 +57,7 @@ export class ProductRepository {
         take: query.limit,
         include: {
           seller: { select: { storeName: true } },
-          category: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true, slug: true } },
         },
       }),
     ]);
@@ -65,22 +65,77 @@ export class ProductRepository {
     // For each product, attach the cheapest active variant so ProductCard
     // can render a hero image. Single bulk query (no N+1).
     const productIds = rows.map((r) => r.id);
-    const variantByProduct = await this.loadCheapestVariantImage(productIds);
+    const [variantByProduct, priceRangeByProduct] = await Promise.all([
+      this.loadCheapestVariantImage(productIds),
+      this.loadPriceRangesByProduct(productIds),
+    ]);
 
     return {
       data: rows.map((row) => {
         const variant = variantByProduct.get(row.id);
-        // Pass the cheapest variant down to fromDatabase so the entity's
-        // getMinPrice/getMaxPrice/toPublicSummary have the data they need.
-        return ProductEntity.fromDatabase(
+        const priceRange = priceRangeByProduct.get(row.id) ?? null;
+        // `fromWithPriceRange` writes the aggregation straight into the
+        // entity so `getMinPrice()` / `getMaxPrice()` reflect every active
+        // variant — not just the cheapest one we loaded for the hero.
+        return ProductEntity.fromWithPriceRange(
           row,
           variant ? [variant] : [],
           row.seller?.storeName ?? null,
           row.category ?? null,
+          priceRange,
         );
       }),
       total,
     };
+  }
+
+  /**
+   * Bulk-load the min/max price across ALL active variants for the given
+   * products in a single round trip. Used by the list endpoint so cards
+   * can render a "price range" instead of a single number when variants
+   * have diverging prices.
+   *
+   * Why a raw query and not Prisma `include`: there's no first-class
+   * "aggregate over joined rows" in Prisma's query builder; `groupBy` only
+   * counts, not sums/min/max. A `GROUP BY` over `product_variants` is the
+   * cheapest correct answer — one index scan on `(product_id, is_active)`,
+   * no N+1.
+   *
+   * Returns `null` for the price of any product with zero active variants
+   * — the caller falls back to `basePrice` for those.
+   */
+  private async loadPriceRangesByProduct(
+    productIds: string[],
+  ): Promise<Map<string, { min: number; max: number }>> {
+    const result = new Map<string, { min: number; max: number }>();
+    if (productIds.length === 0) return result;
+
+    interface RawPriceRange {
+      productId: string;
+      min: Prisma.Decimal | null;
+      max: Prisma.Decimal | null;
+    }
+
+    const rows = await this.prisma.$queryRaw<RawPriceRange[]>`
+      SELECT
+        pv.product_id      AS "productId",
+        MIN(pv.price)      AS "min",
+        MAX(pv.price)      AS "max"
+      FROM product_variants pv
+      WHERE pv.product_id = ANY(${productIds}::uuid[])
+        AND pv.is_active  = true
+      GROUP BY pv.product_id
+    `;
+
+    for (const row of rows) {
+      if (row.min != null && row.max != null) {
+        result.set(row.productId, {
+          min: Number(row.min),
+          max: Number(row.max),
+        });
+      }
+    }
+    return result;
   }
 
   /**
@@ -159,7 +214,7 @@ export class ProductRepository {
       where: { id, deletedAt: null },
       include: {
         seller: { select: { storeName: true } },
-        category: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, slug: true } },
       },
     });
     if (!row) return null;
@@ -178,7 +233,7 @@ export class ProductRepository {
       where: { slug, deletedAt: null },
       include: {
         seller: { select: { storeName: true } },
-        category: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, slug: true } },
       },
     });
     if (!row) return null;
@@ -306,7 +361,7 @@ export class ProductRepository {
         data: updateData,
         include: {
           seller: { select: { storeName: true } },
-          category: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true, slug: true } },
         },
       });
       const variants = await this.loadVariantsWithAttributes(id);

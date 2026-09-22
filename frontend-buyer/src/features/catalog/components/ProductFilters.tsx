@@ -55,7 +55,7 @@ export function ProductFilters({
 
   const isActive =
     value.search !== '' ||
-    value.categoryId !== null ||
+    value.categorySlug !== null ||
     value.minPrice !== null ||
     value.maxPrice !== null ||
     value.sortBy !== 'created_desc';
@@ -81,18 +81,19 @@ export function ProductFilters({
           className="flex flex-wrap gap-2 mt-2"
         >
           <CategoryPill
-            active={value.categoryId === null}
-            onClick={() => update({ categoryId: null })}
+            active={value.categorySlug === null}
+            onClick={() => update({ categorySlug: null })}
           >
             All
           </CategoryPill>
           {categories.map((cat) => (
             <CategoryPill
               key={cat.id}
-              active={value.categoryId === cat.id}
+              active={value.categorySlug === cat.slug}
               onClick={() =>
                 update({
-                  categoryId: value.categoryId === cat.id ? null : cat.id,
+                  categorySlug:
+                    value.categorySlug === cat.slug ? null : cat.slug,
                 })
               }
             >

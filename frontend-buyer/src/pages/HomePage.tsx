@@ -462,7 +462,7 @@ function CategoriesRow({ categories }: { categories: Category[] }) {
       {categories.map((cat, i) => (
         <Link
           key={cat.id}
-          to={`/shop?category=${cat.id}`}
+          to={`/category/${cat.slug}`}
           className={cn(
             'group flex flex-col gap-3 h-28 rounded-xl p-4',
             'bg-gradient-to-br',

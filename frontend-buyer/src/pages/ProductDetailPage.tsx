@@ -400,7 +400,10 @@ export function ProductDetailPage() {
             ? [
                 { label: 'Home', path: '/' },
                 { label: 'Shop', path: '/shop' },
-                { label: product.category.name, path: `/shop?category=${product.category.id}` },
+                {
+                  label: product.category.name,
+                  path: `/category/${product.category.slug}`,
+                },
                 { label: product.name },
               ]
             : [

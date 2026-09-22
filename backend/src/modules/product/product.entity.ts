@@ -1,6 +1,13 @@
 import type { Product } from "@prisma/client";
 
 export class ProductEntity {
+  /**
+   * Internal cache for the pre-computed min/max price across all active
+   * variants. Populated by `fromWithPriceRange` — not exposed in the public
+   * API but read by `getMinPrice` / `getMaxPrice`.
+   */
+  private _priceRange: { min: number; max: number } | null = null;
+
   constructor(
     public readonly id: string,
     public readonly sellerId: string,
@@ -16,8 +23,11 @@ export class ProductEntity {
     public readonly variants: ReadonlyArray<import("./product-variant.entity").ProductVariantEntity> = [],
     /** Populated at query time via Prisma `include: { seller: { select: { storeName: true } } }`. */
     public readonly storeName: string | null = null,
-    /** Populated at query time via Prisma `include: { category: { select: { id: true, name: true } } }`. */
-    public readonly category: { id: string; name: string } | null = null,
+    /** Populated at query time via Prisma `include: { category: { select: { id, name, slug } } }`.
+     *  `slug` is included so the storefront can build SEO-friendly
+     *  `/category/:slug` links from any product payload without an extra
+     *  round trip to `GET /categories/:id`. */
+    public readonly category: { id: string; name: string; slug: string } | null = null,
   ) {
     if (basePrice < 0) {
       throw new Error("Product base price cannot be negative");
@@ -33,13 +43,28 @@ export class ProductEntity {
     return this.variants.some((v) => v.isActive);
   }
 
+  /**
+   * Lowest price across all active variants.
+   *
+   * When the entity was built via `fromWithPriceRange` (the list endpoint),
+   * the value comes from a raw SQL aggregation over ALL active variants —
+   * not just the cheapest variant that was loaded for the card image.
+   * When built via `fromDatabase` (detail endpoint), it falls back to
+   * `this.variants` which contains the full variant list.
+   */
   getMinPrice(): number {
+    if (this._priceRange) return this._priceRange.min;
     if (this.variants.length === 0) return this.basePrice;
     const prices = this.variants.filter((v) => v.isActive).map((v) => v.price);
     return prices.length > 0 ? Math.min(...prices) : this.basePrice;
   }
 
+  /**
+   * Highest price across all active variants.
+   * See `getMinPrice` for the `_priceRange` caching rationale.
+   */
   getMaxPrice(): number {
+    if (this._priceRange) return this._priceRange.max;
     if (this.variants.length === 0) return this.basePrice;
     const prices = this.variants.filter((v) => v.isActive).map((v) => v.price);
     return prices.length > 0 ? Math.max(...prices) : this.basePrice;
@@ -108,7 +133,7 @@ export class ProductEntity {
     row: Product,
     variants: import("./product-variant.entity").ProductVariantEntity[] = [],
     storeName: string | null = null,
-    category: { id: string; name: string } | null = null,
+    category: { id: string; name: string; slug: string } | null = null,
   ): ProductEntity {
     return new ProductEntity(
       row.id,
@@ -132,6 +157,49 @@ export class ProductEntity {
       storeName,
       category,
     );
+  }
+
+  /**
+   * Like `fromDatabase` but also accepts a pre-computed price range so that
+   * `getMinPrice()` / `getMaxPrice()` reflect ALL active variants — not just
+   * the cheapest one that was loaded for the card thumbnail.
+   *
+   * Without this, a product with 3 variants priced at 100 / 250 / 500 would
+   * report `minPrice === maxPrice === 100` in the catalog list because
+   * `loadCheapestVariantImage` only loads the 100-variant to show the card
+   * image, leaving `this.variants.length === 1`.
+   */
+  static fromWithPriceRange(
+    row: Product,
+    variants: import("./product-variant.entity").ProductVariantEntity[] = [],
+    storeName: string | null = null,
+    category: { id: string; name: string; slug: string } | null = null,
+    priceRange: { min: number; max: number } | null = null,
+  ): ProductEntity {
+    const entity = new ProductEntity(
+      row.id,
+      row.sellerId,
+      row.categoryId,
+      row.name,
+      row.slug,
+      row.description,
+      Number(row.basePrice),
+      Array.isArray(row.images)
+        ? (row.images as string[])
+        : row.images && typeof row.images === "object"
+          ? Object.values(row.images as Record<string, string>)
+          : [],
+      row.isActive,
+      row.createdAt,
+      row.updatedAt,
+      variants,
+      storeName,
+      category,
+    );
+    if (priceRange) {
+      (entity as unknown as { _priceRange: { min: number; max: number } | null })._priceRange = priceRange;
+    }
+    return entity;
   }
 
   toPublicSummary() {

@@ -24,8 +24,10 @@ export interface ProductSummary {
   sellerId: string;
   /** Optional — populated by the backend only when the row has a category. */
   categoryId: string | null;
-  /** Populated via `include: { category: { select: { id: true, name: true } } }` on the backend. */
-  category?: { id: string; name: string } | null;
+  /** Populated via `include: { category: { select: { id, name, slug } } }` on the backend.
+   *  `slug` lets the storefront build `/category/:slug` links from any
+   *  product payload without an extra round trip. */
+  category?: { id: string; name: string; slug: string } | null;
   name: string;
   slug: string;
   basePrice: number;
@@ -147,7 +149,13 @@ function qualifyProductImages<T extends { imageUrl?: string | null; images?: str
 export interface ProductListParams {
   page?: number;
   limit?: number;
+  /** Filter by category UUID. Prefer `categorySlug` for SEO-friendly URLs. */
   categoryId?: string;
+  /**
+   * Filter by category slug (e.g. "electronics"). When provided, the
+   * backend resolves it to the corresponding UUID before querying.
+   */
+  categorySlug?: string;
   /** Filter to products belonging to a specific seller. */
   sellerId?: string;
   search?: string;

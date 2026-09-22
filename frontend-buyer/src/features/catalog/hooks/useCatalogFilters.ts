@@ -18,6 +18,11 @@ const VALID_SORTS: readonly ProductSort[] = [
  * Sync the `ProductFiltersValue` state with URL query params, so users can
  * bookmark / share a filtered catalog view. Filters are pushed onto
  * `?q=...&category=...&min=...&max=...&sort=...`.
+ *
+ * `category` stores a slug (e.g. "electronics"), not a UUID — the
+ * storefront's canonical URL is `/category/electronics`; this hook keeps
+ * `/shop?category=electronics` in sync when the user navigates between the
+ * two surfaces.
  */
 export function useCatalogFilters(): {
   filters: ProductFiltersValue;
@@ -39,7 +44,7 @@ export function useCatalogFilters(): {
 
     return {
       search: params.get('q') ?? '',
-      categoryId: params.get('category') ?? null,
+      categorySlug: params.get('category') ?? null,
       minPrice: minRaw === null ? null : Number(minRaw) || null,
       maxPrice: maxRaw === null ? null : Number(maxRaw) || null,
       sortBy,
@@ -51,7 +56,7 @@ export function useCatalogFilters(): {
       const sp = new URLSearchParams();
 
       if (next.search) sp.set('q', next.search);
-      if (next.categoryId) sp.set('category', next.categoryId);
+      if (next.categorySlug) sp.set('category', next.categorySlug);
       if (next.minPrice !== null && Number.isFinite(next.minPrice)) {
         sp.set('min', String(next.minPrice));
       }

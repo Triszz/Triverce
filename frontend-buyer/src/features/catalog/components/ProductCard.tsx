@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { Store } from "lucide-react";
 import type { ProductSummary } from "@/services/productService";
 import { pickHeroImage } from "@/services/productService";
-import { PriceTag } from "@/components/ui/PriceTag";
 import { cn } from "@/lib/cn";
 
 /**
@@ -26,6 +25,22 @@ function PlaceholderImage({ name }: { name: string }) {
   );
 }
 
+/**
+ * Localised VND formatter with the Vietnamese "đ" suffix (e.g. "100.000 đ")
+ * instead of the Intl-currency default "₫" or "VND". Used inside the price
+ * range to keep both ends of the dash readable on one line.
+ *
+ * `maximumFractionDigits: 0` because VND never has sub-units in practice —
+ * the smallest denomination is 1.000 ₫ and amounts below are not real.
+ */
+const vndFormatter = new Intl.NumberFormat("vi-VN", {
+  maximumFractionDigits: 0,
+});
+
+function formatVnd(value: number): string {
+  return `${vndFormatter.format(value)} đ`;
+}
+
 export interface ProductCardProps {
   product: ProductSummary;
   /**
@@ -41,12 +56,22 @@ export interface ProductCardProps {
  * Layout choices:
  *   • Square hero image with overflow-hidden + slight zoom on hover.
  *   • Card lifts on hover (`-translate-y-0.5`) for that "premium" feel.
- *   • Shows price-range when minPrice !== maxPrice (variant products).
+ *   • Shows a "minPrice – maxPrice" range when variants have diverging prices.
+ *     Both ends render at the same `text-base font-semibold` so the dash
+ *     sits on a single visual baseline — using a smaller `text-sm` for the
+ *     max end (as we used to) makes the range look unbalanced on cards
+ *     where the second number is wider than the first.
  *   • Wraps the entire card in a Link so the whole surface is clickable.
  */
 export function ProductCard({ product, className }: ProductCardProps) {
   const [imgError, setImgError] = useState(false);
-  const hasPriceRange = product.minPrice !== product.maxPrice;
+  // Only treat as a range when both fields are present AND the prices
+  // actually differ. A product whose variants all share the same price
+  // (the common case) keeps the single-number layout.
+  const hasPriceRange =
+    product.minPrice != null &&
+    product.maxPrice != null &&
+    product.minPrice < product.maxPrice;
   const heroSrc = pickHeroImage(product);
   const showPlaceholder = !heroSrc || imgError;
 
@@ -116,21 +141,24 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </Link>
         </h3>
 
-        <div className="flex items-baseline gap-1.5">
-          {hasPriceRange ? (
-            <>
-              <PriceTag value={product.minPrice} size="md" />
-              <span className="text-xs text-slate-400">–</span>
-              <PriceTag
-                value={product.maxPrice}
-                size="sm"
-                className="text-slate-500"
-              />
-            </>
-          ) : (
-            <PriceTag value={product.minPrice} size="md" />
-          )}
-        </div>
+        {hasPriceRange ? (
+          <p
+            className="text-lg font-semibold text-blue-700 tabular-nums tracking-tight"
+            aria-label={`Price from ${formatVnd(product.minPrice)} to ${formatVnd(product.maxPrice)}`}
+          >
+            {formatVnd(product.minPrice)}
+            {/* Dash: smaller + lighter tone-on-tone so the two prices stay
+                the visual anchors. `blue-400` keeps it in the same hue
+                family instead of dropping to grey, which would clash with
+                the blue-coloured prices. */}
+            <span className="mx-1.5 text-base text-blue-400 font-normal">–</span>
+            {formatVnd(product.maxPrice)}
+          </p>
+        ) : (
+          <p className="text-lg font-semibold text-blue-700 tabular-nums tracking-tight">
+            {formatVnd(product.minPrice ?? product.basePrice)}
+          </p>
+        )}
       </div>
     </div>
   );

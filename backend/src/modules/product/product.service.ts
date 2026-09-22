@@ -1,6 +1,7 @@
 import { ProductEntity } from "./product.entity";
 import { ProductRepository } from "./product.repository";
 import { ProductVariantEntity } from "./product-variant.entity";
+import { CategoryRepository } from "../category/category.repository";
 import {
   CreateProductDto,
   UpdateProductDto,
@@ -16,13 +17,33 @@ import {
 } from "../../core/errors/AppError";
 
 export class ProductService {
-  constructor(private productRepository: ProductRepository) {}
+  constructor(
+    private productRepository: ProductRepository,
+    private categoryRepository: CategoryRepository,
+  ) {}
 
   // Get products (filter)
   async getAll(
     query: ProductQuery,
   ): Promise<{ data: ProductEntity[]; total: number }> {
-    return this.productRepository.findAll(query);
+    // Resolve `categorySlug` → `categoryId` so the repository only ever
+    // sees the UUID-shaped filter. This keeps the slug-shaped public API
+    // (the storefront hits `/category/electronics`, not `/category/<uuid>`)
+    // while the underlying column stays a UUID FK.
+    const resolvedQuery: ProductQuery = { ...query };
+    if (query.categorySlug && !query.categoryId) {
+      const category = await this.categoryRepository.findBySlug(
+        query.categorySlug,
+      );
+      if (!category) {
+        throw new NotFoundError(
+          `Category with slug "${query.categorySlug}" not found`,
+        );
+      }
+      resolvedQuery.categoryId = category.id;
+      delete resolvedQuery.categorySlug;
+    }
+    return this.productRepository.findAll(resolvedQuery);
   }
 
   // Get product by id

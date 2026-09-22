@@ -85,6 +85,15 @@ export const UpdateVariantSchema = VariantSchema.partial();
 export const ProductQuerySchema = z
   .object({
     categoryId: z.uuid().optional(),
+    /**
+     * Filter by category slug. Preferred over `categoryId` because it lets
+     * the storefront use SEO-friendly URLs like `/category/electronics`.
+     *
+     * The repository resolves this slug → id before building the WHERE
+     * clause, so the public contract stays slug-shaped even though the
+     * underlying column is a UUID FK.
+     */
+    categorySlug: slugSchema(100).optional(),
     sellerId: z.uuid().optional(),
     isActive: z
       .string()
