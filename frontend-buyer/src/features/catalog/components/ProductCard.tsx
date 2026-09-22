@@ -143,19 +143,19 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
         {hasPriceRange ? (
           <p
-            className="text-lg font-semibold text-blue-700 tabular-nums tracking-tight"
+            className="text-lg font-semibold text-blue-800 tabular-nums tracking-tight"
             aria-label={`Price from ${formatVnd(product.minPrice)} to ${formatVnd(product.maxPrice)}`}
           >
             {formatVnd(product.minPrice)}
             {/* Dash: smaller + lighter tone-on-tone so the two prices stay
-                the visual anchors. `blue-400` keeps it in the same hue
+                the visual anchors. `blue-500` keeps it in the same hue
                 family instead of dropping to grey, which would clash with
                 the blue-coloured prices. */}
-            <span className="mx-1.5 text-base text-blue-400 font-normal">–</span>
+            <span className="mx-1.5 text-base text-blue-500 font-normal">–</span>
             {formatVnd(product.maxPrice)}
           </p>
         ) : (
-          <p className="text-lg font-semibold text-blue-700 tabular-nums tracking-tight">
+          <p className="text-lg font-semibold text-blue-800 tabular-nums tracking-tight">
             {formatVnd(product.minPrice ?? product.basePrice)}
           </p>
         )}
