@@ -13,6 +13,7 @@ import {
 } from "../../core/errors/AppError";
 import { CartRepository } from "../cart/cart.repository";
 import { PaymentRepository } from "../payment/payment.repository";
+import { ProductRepository } from "../product/product.repository";
 import type { IPaymentGateway } from "../payment/payment.interface";
 import type { INotificationService } from "../../core/interfaces/INotificationService";
 import type { IUserAddressService } from "../../core/interfaces/IUserAddressService";
@@ -34,6 +35,7 @@ export class OrderService {
     private prisma: PrismaClient,
     private notifications: INotificationService,
     private userAddresses: IUserAddressService,
+    private productRepository: ProductRepository,
   ) {}
 
   async checkout(
@@ -424,6 +426,13 @@ export class OrderService {
             trx,
           );
         }
+      }
+
+      // Increment sold_count on every product touched by this order.
+      // Runs inside the same transaction so the counter and the status
+      // flip are atomic — either both happen or neither does.
+      if (dto.status === "delivered") {
+        await this.productRepository.incrementSoldCountByOrder(orderId, trx);
       }
     });
 

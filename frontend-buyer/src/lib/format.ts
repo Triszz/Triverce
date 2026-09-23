@@ -98,3 +98,27 @@ export function formatRelativeTime(
   if (abs < year) return fmt(abs / month, 'month');
   return fmt(abs / year, 'year');
 }
+
+/**
+ * Formats a sold-quantity number into a compact string.
+ *
+ *   0          → ""            (caller suppresses the badge entirely)
+ *   999        → "999 Đã bán"
+ *   1_000      → "1k+ Đã bán"
+ *   12_340     → "12.3k+ Đã bán"
+ *   1_000_000  → "1Tr+ Đã bán"
+ *
+ * Once the count crosses the 1k / 1M rounding thresholds, the suffix
+ * gains a trailing `+` so the storefront signals "at least this many"
+ * without lying about the exact figure — a 1.2k rounded count could
+ * really be 1_200 or 1_249, and the badge should never claim precision
+ * it doesn't have. Under 1k the raw integer is shown verbatim and the
+ * `+` is omitted because the value IS exact.
+ */
+export function formatSold(count?: number | null): string {
+  if (count == null) return '';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}Tr+ Đã bán`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k+ Đã bán`;
+  if (count > 0) return `${count} Đã bán`;
+  return '';
+}

@@ -137,6 +137,13 @@ model Product {
   // is treated as the main / thumbnail image by the storefront.
   images      String[]  @default([]) @map("images")
   isActive    Boolean   @default(true) @map("is_active")
+  /**
+   * Cumulative quantity sold across all variants for orders that have reached
+   * `status = delivered`. Denormalised counter — incremented atomically
+   * inside the order-delivery transaction so the catalog always reads a
+   * consistent snapshot without any locking overhead.
+   */
+  soldCount   Int       @default(0) @map("sold_count")
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

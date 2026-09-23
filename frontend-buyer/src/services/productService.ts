@@ -54,6 +54,12 @@ export interface ProductSummary {
    * Backend populates this via `include: { seller: { select: { storeName: true } } }`.
    */
   storeName?: string | null;
+  /**
+   * Cumulative quantity sold across all variants for orders that have
+   * reached `status = delivered`. Denormalised on `products.sold_count`.
+   * Undefined on older payloads that predate the column.
+   */
+  soldCount?: number;
 }
 
 /** One attribute value attached to a variant. */

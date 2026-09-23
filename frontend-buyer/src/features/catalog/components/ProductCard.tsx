@@ -4,6 +4,7 @@ import { Store } from "lucide-react";
 import type { ProductSummary } from "@/services/productService";
 import { pickHeroImage } from "@/services/productService";
 import { cn } from "@/lib/cn";
+import { formatSold } from "@/lib/format";
 
 /**
  * Neutral 1:1 placeholder used when a product has no image yet.
@@ -61,26 +62,35 @@ export interface ProductCardProps {
  *     sits on a single visual baseline — using a smaller `text-sm` for the
  *     max end (as we used to) makes the range look unbalanced on cards
  *     where the second number is wider than the first.
- *   • Wraps the entire card in a Link so the whole surface is clickable.
+ *   • Stretched-link pattern: the product-name `<Link>` carries an
+ *     `after:absolute after:inset-0` pseudo-element so any pixel of the
+ *     card navigates to the product detail, while the in-card store-name
+ *     link keeps its own `/store/:id` destination via `relative z-20`.
+ *   • Footer row (price left / sold-count right) always anchored to the
+ *     card bottom via `mt-auto` inside a `flex flex-col h-full` wrapper,
+ *     keeping the product grid perfectly aligned regardless of name length.
  */
 export function ProductCard({ product, className }: ProductCardProps) {
   const [imgError, setImgError] = useState(false);
-  // Only treat as a range when both fields are present AND the prices
-  // actually differ. A product whose variants all share the same price
-  // (the common case) keeps the single-number layout.
   const hasPriceRange =
     product.minPrice != null &&
     product.maxPrice != null &&
     product.minPrice < product.maxPrice;
   const heroSrc = pickHeroImage(product);
   const showPlaceholder = !heroSrc || imgError;
+  const soldLabel = formatSold(product.soldCount);
 
   return (
     <div
       className={cn(
-        "group block bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden",
+        // `relative` anchors the stretched-link `::after` pseudo-element so
+        // the entire card surface becomes a click target. We intentionally
+        // use a stretched link (rather than wrapping the whole `<div>` in
+        // a single `<Link>`) so the in-card "store name" link keeps its
+        // own destination without nested-link errors.
+        "group relative flex flex-col h-full bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden cursor-pointer",
         "transition-all duration-200 ease-out",
-        "hover:shadow-md hover:-translate-y-0.5 hover:border-slate-200",
+        "hover:shadow-lg hover:-translate-y-0.5 hover:border-slate-200",
         "focus-within:ring-2 focus-within:ring-[#002b5b] focus-within:ring-offset-2",
         className,
       )}
@@ -114,51 +124,129 @@ export function ProductCard({ product, className }: ProductCardProps) {
         </div>
       </Link>
 
-      <div className="p-4 space-y-2">
+      {/* ── Content: store, name, footer row ─────────────────────────── */}
+      <div className="flex flex-col flex-1 p-4">
         {product.storeName && (
           <p
             className="text-sm font-medium text-slate-500 truncate flex items-center gap-1"
             title={product.storeName}
           >
             <Store size={12} className="shrink-0 text-slate-400" aria-hidden />
+            {/*
+              `relative z-20` lifts this inner link above the stretched-link
+              pseudo-element below. Without it, the stretched layer would
+              swallow clicks meant for the store, sending users to the
+              product page when they meant to visit the seller storefront.
+            */}
             <Link
               to={`/store/${product.sellerId}`}
-              className="hover:text-[#002b5b] hover:underline transition-colors"
+              className="relative z-20 hover:text-[#002b5b] hover:underline transition-colors"
             >
               {product.storeName}
             </Link>
           </p>
         )}
 
-        <h3 className="text-base font-semibold text-slate-900 leading-snug line-clamp-2">
+        {/*
+          Product name — `line-clamp-2` enforces the Shopee-style 2-line cap.
+          `min-h-[2.75rem]` reserves space for 2 lines so that a 1-line name
+          doesn't shrink the card, keeping the grid visually consistent.
+          Using `h-[2.75rem]` with `line-clamp-2` is equivalent to
+          `line-clamp` with a fixed box that clips overflow — simpler for
+          browsers that don't yet support `line-clamp` natively.
+
+          `after:absolute after:inset-0 after:content-['']` is the
+          stretched-link trick: the invisible `::after` covers the entire
+          card (because the card has `relative`), turning any whitespace
+          / padding / empty space below the title into a click target.
+          Combined with `cursor-pointer` on the outer `<div>`, the whole
+          card now behaves as one big link without nesting `<a>` inside
+          another `<a>` (which would be invalid HTML).
+        */}
+        <h3 className="text-base font-semibold text-slate-900 leading-snug line-clamp-2 min-h-[2.75rem] mt-auto mb-2">
           <Link
             to={`/product/${product.slug}`}
             aria-label={`View ${product.name}`}
             title={product.name}
-            className="transition-colors group-hover:text-[#002b5b] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2"
+            className="after:absolute after:inset-0 after:content-[''] transition-colors group-hover:text-[#002b5b] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002b5b] focus-visible:ring-offset-2"
           >
             {product.name}
           </Link>
         </h3>
 
-        {hasPriceRange ? (
-          <p
-            className="text-lg font-semibold text-blue-800 tabular-nums tracking-tight"
-            aria-label={`Price from ${formatVnd(product.minPrice)} to ${formatVnd(product.maxPrice)}`}
-          >
-            {formatVnd(product.minPrice)}
-            {/* Dash: smaller + lighter tone-on-tone so the two prices stay
-                the visual anchors. `blue-500` keeps it in the same hue
-                family instead of dropping to grey, which would clash with
-                the blue-coloured prices. */}
-            <span className="mx-1.5 text-base text-blue-500 font-normal">–</span>
-            {formatVnd(product.maxPrice)}
-          </p>
-        ) : (
-          <p className="text-lg font-semibold text-blue-800 tabular-nums tracking-tight">
-            {formatVnd(product.minPrice ?? product.basePrice)}
-          </p>
-        )}
+        {/*
+          Footer row — always pushed to card bottom via `mt-auto`.
+          `flex justify-between items-center` keeps price on the left and
+          sold-count on the right. `whitespace-nowrap` + `overflow-hidden`
+          + `min-w-0` on the price box guarantees the row stays on a
+          single line — even if the price is long enough to push the
+          sold-count aside, the overflow is silently clipped rather than
+          wrapping into a second line and re-shifting the card height.
+
+          `relative z-20` here so future CTAs (Add to Cart, Quick View,
+          …) can sit above the stretched-link overlay without being
+          captured by it — just give them `relative z-30` and they win
+          the click target race.
+        */}
+        <div className="relative z-20 mt-auto flex justify-between items-center gap-2 whitespace-nowrap overflow-hidden">
+          {/*
+            Price — single source of truth on every card: `minPrice`.
+            When the product has a variant price range (min < max) we
+            prefix a small "Từ" label so the storefront signals "this
+            starts here, other variants cost more" without rendering both
+            bounds and breaking the footer into multiple lines. Matches
+            the Shopee / Lazada pattern.
+          */}
+          <div className="min-w-0 overflow-hidden flex items-baseline">
+            {hasPriceRange ? (
+              <>
+                {/*
+                  "Từ" — bumped from slate-500/normal to slate-700/medium so
+                  it doesn't disappear next to the much louder blue-800
+                  price. Still subordinate to the actual number, but
+                  legible at thumbnail size.
+                */}
+                <span
+                  className="text-sm font-medium text-slate-700 mr-1 shrink-0"
+                  aria-hidden
+                >
+                  Từ
+                </span>
+                {/*
+                  `title` mirrors the rendered (un-truncated) price, so a
+                  user hovering over the visible ellipsis still sees the
+                  full number in the browser's native tooltip — they
+                  never lose the precise figure, only the layout loses it.
+                */}
+                <span
+                  className="text-lg font-semibold text-blue-800 tabular-nums tracking-tight leading-tight truncate"
+                  title={formatVnd(product.minPrice)}
+                >
+                  {formatVnd(product.minPrice)}
+                </span>
+              </>
+            ) : (
+              <span
+                className="text-lg font-semibold text-blue-800 tabular-nums tracking-tight leading-tight truncate"
+                title={formatVnd(product.minPrice ?? product.basePrice)}
+              >
+                {formatVnd(product.minPrice ?? product.basePrice)}
+              </span>
+            )}
+          </div>
+
+          {/*
+            Sold count — `shrink-0` keeps the badge at its intrinsic
+            width so the `truncate` ellipsis on the price catches first
+            when space is tight. Combined with the parent's
+            `whitespace-nowrap overflow-hidden`, the row never wraps.
+          */}
+          {soldLabel && (
+            <span className="text-xs text-slate-500 font-medium whitespace-nowrap shrink-0">
+              {soldLabel}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

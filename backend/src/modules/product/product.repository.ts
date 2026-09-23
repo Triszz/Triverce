@@ -744,6 +744,39 @@ export class ProductRepository {
   }
 
   /**
+   * Increment `products.sold_count` by the cumulative delivered quantity
+   * contributed by every order_item belonging to `orderId`, grouped by
+   * product (since one order can span multiple products).
+   *
+   * Single round-trip via a single `UPDATE ... FROM (SELECT ...)` so it
+   * runs as one atomic statement regardless of how many products the
+   * order touched. Caller-controlled transaction keeps the increment in
+   * sync with the order status flip — either both happen or neither does.
+   *
+   * Cancelled / non-delivered orders never reach this branch (the call
+   * site lives inside `OrderService.updateStatus` only when
+   * `dto.status === "delivered"`), so the counter only ever moves forward
+   * for sales that genuinely closed.
+   */
+  async incrementSoldCountByOrder(
+    orderId: string,
+    trx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await trx.$executeRaw`
+      UPDATE products AS p
+      SET sold_count = p.sold_count + agg.qty
+      FROM (
+        SELECT pv.product_id AS product_id, SUM(oi.quantity)::int AS qty
+        FROM order_items oi
+        JOIN product_variants pv ON pv.id = oi.variant_id
+        WHERE oi.order_id = ${orderId}::uuid
+        GROUP BY pv.product_id
+      ) AS agg
+      WHERE p.id = agg.product_id
+    `;
+  }
+
+  /**
    * Loads ALL variants (active and inactive) for a product, along with their
    * attribute join rows and computed `available` stock.
    *

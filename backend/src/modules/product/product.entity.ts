@@ -28,6 +28,18 @@ export class ProductEntity {
      *  `/category/:slug` links from any product payload without an extra
      *  round trip to `GET /categories/:id`. */
     public readonly category: { id: string; name: string; slug: string } | null = null,
+    /**
+     * Cumulative quantity sold across all order_items of all variants of this
+     * product that have ever reached `status = delivered`. Denormalised on
+     * `products.sold_count` — incremented atomically by
+     * `OrderService.updateStatus` inside the order status transaction.
+     *
+     * Optional on the entity because historically-created rows predate the
+     * column. Missing rows in old code paths (e.g. detail page built before
+     * the migration ran) report as 0 so the UI can render sensibly without
+     * a runtime null check.
+     */
+    public readonly soldCount: number = 0,
   ) {
     if (basePrice < 0) {
       throw new Error("Product base price cannot be negative");
@@ -156,6 +168,11 @@ export class ProductEntity {
       variants,
       storeName,
       category,
+      // `soldCount` lives on `products.sold_count`. Prisma exposes it as
+      // `row.soldCount`; fallback to 0 when the row is from a stale
+      // connection that doesn't yet know about the column (e.g. during
+      // a rolling migration).
+      (row as unknown as { soldCount?: number }).soldCount ?? 0,
     );
   }
 
@@ -195,6 +212,8 @@ export class ProductEntity {
       variants,
       storeName,
       category,
+      // See `fromDatabase` for why we tolerate a missing column.
+      (row as unknown as { soldCount?: number }).soldCount ?? 0,
     );
     if (priceRange) {
       (entity as unknown as { _priceRange: { min: number; max: number } | null })._priceRange = priceRange;
@@ -221,6 +240,7 @@ export class ProductEntity {
       // even when the authored `images[]` contains duplicates.
       images: this.getEffectiveImages(),
       storeName: this.storeName,
+      soldCount: this.soldCount,
     };
   }
 
@@ -249,6 +269,7 @@ export class ProductEntity {
       updatedAt: this.updatedAt,
       variants: this.variants.map((v) => v.toPublic()),
       storeName: this.storeName,
+      soldCount: this.soldCount,
     };
   }
 }
