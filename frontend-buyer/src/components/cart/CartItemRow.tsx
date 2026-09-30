@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { Button } from '@/components/ui/Button';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useCart } from '@/hooks/useCart';
 import type { CartItemPublic } from '@/services/cartService';
 import { cn } from '@/lib/cn';
@@ -65,6 +66,16 @@ export function CartItemRow({
 }: CartItemRowProps) {
   const { updateItem, removeItem, isUpdating, isRemoving } = useCart();
 
+  /*
+   * Two-step removal: clicking the trash icon opens the confirmation
+   * dialog; the API call only fires from inside the dialog's confirm
+   * handler. `pendingRemoval` is the local "yes, I'm sure" gate — the
+   * shared `isRemoving` from useCart kicks in only after the request
+   * actually leaves, and is what we feed into the dialog's loading
+   * spinner.
+   */
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   const handleCommit = useMemo(
     () => async (next: number) => {
       try {
@@ -82,11 +93,17 @@ export function CartItemRow({
       toast.success(`Removed "${item.productName ?? 'item'}" from cart`);
     } catch {
       // Hook already toasted.
+    } finally {
+      // Close the dialog whether the call succeeded or failed. On error
+      // the optimistic-update rollback already restored the row, so
+      // leaving the dialog open would feel "stuck".
+      setConfirmOpen(false);
     }
   };
 
   const productHref = item.productSlug ? `/product/${item.productSlug}` : null;
   const unitPrice = item.price ?? 0;
+  const productLabel = item.productName ?? 'this item';
 
   return (
     <li
@@ -118,18 +135,28 @@ export function CartItemRow({
 
       {/* Middle column */}
       <div className="flex-1 min-w-0 space-y-1.5">
-        <div className="flex items-start justify-between gap-2">
+        {/*
+         * First row — product name (left) + unit price (right).
+         * Switched from `items-start` to `items-center` so the
+         * baseline of the product name lines up exactly with the
+         * PriceTag (which previously sat a couple of pixels lower
+         * because the PriceTag's intrinsic height pulls it down).
+         * The trash icon, which lives in its own column to the
+         * right, also uses `self-center` so all three elements
+         * share one horizontal axis.
+         */}
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             {productHref ? (
               <Link
                 to={productHref}
                 onClick={onNavigate}
-                className="block text-sm font-medium text-slate-900 hover:text-[#002b5b] line-clamp-2 transition-colors"
+                className="block text-base font-medium text-slate-900 hover:text-[#002b5b] line-clamp-2 transition-colors"
               >
                 {item.productName ?? 'Product'}
               </Link>
             ) : (
-              <p className="text-sm font-medium text-slate-900 line-clamp-2">
+              <p className="text-base font-medium text-slate-900 line-clamp-2">
                 {item.productName ?? 'Product'}
               </p>
             )}
@@ -209,12 +236,16 @@ export function CartItemRow({
         </div>
       </div>
 
-      {/* Remove (top-right) */}
-      <div className="shrink-0 self-start">
+      {/* Remove (top-right). Clicking only opens the confirmation
+       *  dialog; the actual API call fires from `handleRemove`, which
+       *  runs on the dialog's confirm button. `self-center` keeps
+       *  the icon on the same baseline as the product name and
+       *  unit price in the row above. */}
+      <div className="shrink-0 self-center">
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleRemove}
+          onClick={() => setConfirmOpen(true)}
           disabled={isRemoving}
           aria-label={`Remove ${item.productName ?? 'item'}`}
           className="text-slate-400 hover:text-danger-600 hover:bg-danger-50 -mr-2 -mt-1"
@@ -226,6 +257,33 @@ export function CartItemRow({
           )}
         </Button>
       </div>
+
+      {/*
+        Confirmation dialog. `isRemoving` doubles as the dialog's
+        loading flag so the panel locks the moment the request leaves
+        and the spinner lands on the confirm button. The fallback
+        `this item` keeps the sentence grammatical when the API
+        didn't return a product name (rare, but defensive).
+      */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Remove from cart?"
+        description={
+          <>
+            Are you sure you want to remove{' '}
+            <span className="font-medium text-slate-900">
+              {productLabel}
+            </span>{' '}
+            from your cart?
+          </>
+        }
+        cancelLabel="Cancel"
+        confirmLabel="Remove"
+        tone="danger"
+        isLoading={isRemoving}
+        onConfirm={handleRemove}
+      />
     </li>
   );
 }

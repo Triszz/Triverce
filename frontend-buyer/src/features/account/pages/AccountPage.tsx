@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useId, type InputHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageMeta } from '@/components/common/PageMeta';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { formatDateLong } from '@/lib/format';
+import { cn } from '@/lib/cn';
 import {
   useUpdateProfile,
   useChangePassword,
@@ -30,6 +31,21 @@ import {
   type UpdateProfileFormValues,
   type ChangePasswordFormValues,
 } from '@/features/account/useAccount';
+
+/*
+ * Account-page typography — deliberately one notch bigger than the
+ * shared `<Input>` defaults so the profile surface is easy to scan.
+ * Tailwind sizing ladder: `text-xs` → `text-sm` → `text-base`. We
+ * import the constants once so the whole page stays consistent.
+ *
+ * `LABEL_CLASS` no longer carries its own bottom margin — vertical
+ * spacing between the label and the input is now owned by the
+ * `flex-col gap-2` wrapper inside `AccountTextField`. Splitting the
+ * responsibility this way keeps the rhythm consistent regardless of
+ * who consumes the constant.
+ */
+const LABEL_CLASS = 'text-base font-medium text-slate-700';
+const HINT_ERROR_CLASS = 'mt-1.5 text-sm text-slate-500';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * AccountPage — interactive, self-service account management.
@@ -108,7 +124,16 @@ export function AccountPage() {
         description="View and edit your Triverce profile, full name, and password."
       />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      {/*
+        Page container — matches the Cart page's `max-w-7xl` width so the
+        account area feels consistent with the rest of the storefront
+        on large screens. `mx-auto` centres it; the `px-4 sm:px-6 lg:px-8`
+        ladder keeps the horizontal padding responsive (16px on mobile,
+        24px on tablet, 32px on desktop). Mobile `py-8` lets the section
+        breathe on phones; `sm:py-10` mirrors the Cart page above the
+        sm breakpoint.
+      */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Breadcrumb — Home → My Account. Placed at the very top
          * of the main page container, directly above the 'My
          * account' heading, with `mb-6` to separate it from the
@@ -123,7 +148,7 @@ export function AccountPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
               My account
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-base text-slate-500">
               Update your profile and password.
             </p>
           </div>
@@ -221,10 +246,10 @@ function ProfileForm({
   return (
     <Card padded={false}>
       <header className="px-6 pt-5 pb-4 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-900">
+        <h2 className="text-base font-semibold text-slate-900">
           Account information
         </h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <p className="mt-0.5 text-sm text-slate-500">
           Your name is shown on orders and receipts.
         </p>
       </header>
@@ -234,8 +259,13 @@ function ProfileForm({
         noValidate
         className="px-6 py-5 space-y-5"
       >
-        {/* Editable full name */}
-        <Input
+        {/*
+         * Full name — uses a manually-rendered label (not `<Input
+         * label>`) so the typography can follow the rest of the
+         * account page (`LABEL_CLASS`). The shared `Input` keeps its
+         * smaller default for login / register / checkout.
+         */}
+        <AccountTextField
           label="Full name"
           type="text"
           autoComplete="name"
@@ -331,10 +361,10 @@ function ChangePasswordForm() {
   return (
     <Card padded={false}>
       <header className="px-6 pt-5 pb-4 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-900">
+        <h2 className="text-base font-semibold text-slate-900">
           Change password
         </h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <p className="mt-0.5 text-sm text-slate-500">
           Use at least 8 characters with 1 capital letter and 1 number.
         </p>
       </header>
@@ -344,7 +374,7 @@ function ChangePasswordForm() {
         noValidate
         className="px-6 py-5 space-y-4"
       >
-        <Input
+        <AccountTextField
           label="Current password"
           type="password"
           autoComplete="current-password"
@@ -352,7 +382,7 @@ function ChangePasswordForm() {
           error={errors.oldPassword?.message}
           {...register('oldPassword')}
         />
-        <Input
+        <AccountTextField
           label="New password"
           type="password"
           autoComplete="new-password"
@@ -361,7 +391,7 @@ function ChangePasswordForm() {
           hint="At least 8 characters, with 1 capital letter and 1 number."
           {...register('newPassword')}
         />
-        <Input
+        <AccountTextField
           label="Confirm new password"
           type="password"
           autoComplete="new-password"
@@ -416,16 +446,82 @@ function ReadOnlyField({
           : 'grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-1 sm:gap-4 border-t border-slate-100 pt-4'
       }
     >
-      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
+      {/*
+       * Labels (EMAIL ADDRESS, ROLE, MEMBER SINCE) bumped from
+       * `text-xs` to `text-sm` so they match the rest of the
+       * account page after the typography refresh.
+       */}
+      <div className="flex items-center gap-1.5 text-sm font-medium uppercase tracking-wider text-slate-500">
         <span className="text-slate-400">{icon}</span>
         {label}
       </div>
       <div className="space-y-0.5">
-        <div className="text-sm text-slate-900 font-medium break-words">
+        <div className="text-base text-slate-900 font-medium break-words">
           {value}
         </div>
-        {help && <p className="text-xs text-slate-500">{help}</p>}
+        {help && <p className="text-sm text-slate-500">{help}</p>}
       </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * AccountTextField — thin wrapper around `<Input>` that re-renders the
+ * label at `text-base` (instead of Input's default `text-sm`) so the
+ * account page keeps a consistent one-notch-larger typography.
+ *
+ * Implementation: render our own `<label>` outside and pass `id` to
+ * `<Input>` so `htmlFor`/`id` pairing is preserved for accessibility.
+ * `Input`'s built-in `label` prop is intentionally NOT used here.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+type AccountTextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  hint?: string;
+  error?: string;
+  leftIcon?: React.ReactNode;
+};
+
+function AccountTextField({
+  label,
+  hint,
+  error,
+  leftIcon,
+  id,
+  className,
+  ...props
+}: AccountTextFieldProps) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+  return (
+    /*
+     * `flex flex-col gap-2` owns the vertical rhythm between the
+     * label and the input (8px). Previously the label carried its
+     * own `mb-1.5`, which competed with the wrapper's spacing and
+     * made the label feel glued to the input's top border.
+     */
+    <div className="w-full flex flex-col gap-2">
+      <label htmlFor={inputId} className={LABEL_CLASS}>
+        {label}
+      </label>
+      {/*
+        The Input component's default `py-2.5` is already the right
+        height for the account page; no extra padding needed. We
+        only need to bump the input's text size so it matches the
+        new label, which is what `text-base` does here.
+      */}
+      <Input
+        id={inputId}
+        leftIcon={leftIcon}
+        {...props}
+        className={cn('text-base', className)}
+      />
+      {hint && !error && (
+        <p className={HINT_ERROR_CLASS}>{hint}</p>
+      )}
+      {error && (
+        <p className={cn(HINT_ERROR_CLASS, 'text-danger-600')}>{error}</p>
+      )}
     </div>
   );
 }

@@ -192,7 +192,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
           {/*
             Price — single source of truth on every card: `minPrice`.
             When the product has a variant price range (min < max) we
-            prefix a small "Từ" label so the storefront signals "this
+            prefix a small "From" label so the storefront signals "this
             starts here, other variants cost more" without rendering both
             bounds and breaking the footer into multiple lines. Matches
             the Shopee / Lazada pattern.
@@ -201,16 +201,16 @@ export function ProductCard({ product, className }: ProductCardProps) {
             {hasPriceRange ? (
               <>
                 {/*
-                  "Từ" — bumped from slate-500/normal to slate-700/medium so
-                  it doesn't disappear next to the much louder blue-800
-                  price. Still subordinate to the actual number, but
-                  legible at thumbnail size.
+                  "From" — mirrors the Shopee / Lazada convention for
+                  variant-priced cards in English locales. Bumped from
+                  slate-500/normal to slate-700/medium so it doesn't
+                  disappear next to the much louder blue-800 price.
                 */}
                 <span
                   className="text-sm font-medium text-slate-700 mr-1 shrink-0"
                   aria-hidden
                 >
-                  Từ
+                  From
                 </span>
                 {/*
                   `title` mirrors the rendered (un-truncated) price, so a

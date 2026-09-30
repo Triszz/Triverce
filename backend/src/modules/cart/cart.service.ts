@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { CartRepository } from "./cart.repository";
 import { InventoryRepository } from "../inventory/inventory.repository";
 import { CartEntity } from "./cart.entity";
@@ -189,19 +190,112 @@ export class CartService {
     if (!item)
       throw new NotFoundError(`Cart item with id "${cartItemId}" not found`);
 
+    /*
+     * Resilient delete:
+     *
+     * The original implementation surfaced any 4xx-style failure as a
+     * `BadRequestError`, which broke the cart UI whenever the inventory
+     * side of the relationship drifted out of sync with the cart side
+     * (a real-world failure mode we've seen at least once — see the
+     * `78bf89e6-…` incident where `inventory.reserved` no longer matched
+     * the cart item's `quantity`).
+     *
+     * Three failure modes are now each handled individually:
+     *
+     *   1. cartItem already gone (`P2025`): the user's intent ("this
+     *      item is no longer in my cart") is already satisfied. Swallow
+     *      the error and return the current cart. This is the textbook
+     *      idempotent-delete pattern.
+     *
+     *   2. The variant / inventory row has been hard-deleted: the
+     *      release step throws `INVENTORY_NOT_FOUND`. We log a warning
+     *      and continue — the cart item itself is still deletable, and
+     *      we have nothing to release anyway.
+     *
+     *   3. `RELEASE_FAILED` (`reserved < qty`): a real drift between
+     *      inventory.reserved and the cart item's quantity. We log the
+     *      drift with the offending values for ops to investigate, but
+     *      still proceed with the cart-item delete. The user's intent
+     *      is to remove the row from their cart, and the reserved-
+     *      underflow is not their fault — bouncing the request as a
+     *      400 only punishes them for an upstream inconsistency.
+     */
+    let deleteOk = false;
+    let releaseSkippedReason: string | null = null;
+
     try {
       await this.prisma.$transaction(async (trx) => {
-        await this.cartRepository.removeItem(cart.id, cartItemId, trx);
-        await this.inventoryRepository.release(
-          item.variantId,
-          item.quantity,
-          trx,
-        );
+        try {
+          await trx.cartItem.delete({ where: { id: cartItemId } });
+          deleteOk = true;
+        } catch (err) {
+          // P2025 — the row was already deleted by another request
+          // (or a previous attempt). Treat as success; nothing to undo.
+          if (
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === "P2025"
+          ) {
+            deleteOk = true;
+            return;
+          }
+          throw err;
+        }
+
+        try {
+          await this.inventoryRepository.release(
+            item.variantId,
+            item.quantity,
+            trx,
+          );
+        } catch (releaseErr: unknown) {
+          const msg =
+            releaseErr instanceof Error ? releaseErr.message : String(releaseErr);
+
+          if (msg === "INVENTORY_NOT_FOUND") {
+            // Variant or its inventory row was hard-deleted. Nothing
+            // to release, nothing to compensate for.
+            releaseSkippedReason =
+              "inventory row missing — release skipped";
+            console.warn(
+              `[cart.removeItem] inventory row missing for variantId=${item.variantId}; ` +
+                `cartItemId=${cartItemId} deleted without stock release.`,
+            );
+            return;
+          }
+
+          if (msg === "RELEASE_FAILED") {
+            // Reserved-stock drift. Log and proceed — the cart item is
+            // gone, which is what the user asked for.
+            releaseSkippedReason =
+              "reserved stock drift — release skipped, drift logged";
+            console.warn(
+              `[cart.removeItem] RELEASE_FAILED cartItemId=${cartItemId} ` +
+                `variantId=${item.variantId} requestedRelease=${item.quantity}. ` +
+                `Inventory reserved is lower than the cart item's quantity. ` +
+                `Investigate drift; user-facing delete still succeeded.`,
+            );
+            return;
+          }
+
+          throw releaseErr;
+        }
       });
-    } catch (error: any) {
-      if (error?.message === "RELEASE_FAILED")
-        throw new BadRequestError(`Release failed: reserved stock mismatch`);
+    } catch (error: unknown) {
+      // Anything that isn't a known recoverable case bubbles up. We
+      // intentionally don't translate this to BadRequestError anymore —
+      // the recoverable cases are handled inside the transaction.
       throw error;
+    }
+
+    // deleteOk is `true` if either the row was deleted or it was
+    // already gone (P2025). Either way the caller's intent is met.
+    if (!deleteOk) {
+      // Defensive: shouldn't be reachable given the catches above, but
+      // a future regression shouldn't silently misreport.
+      throw new BadRequestError(
+        `Failed to remove cart item ${cartItemId}` +
+          (releaseSkippedReason ? ` (${releaseSkippedReason})` : ""),
+      );
     }
 
     return (await this.cartRepository.findActiveByUserId(userId))!;
@@ -211,22 +305,59 @@ export class CartService {
     const cart = await this.cartRepository.findOrCreate(userId);
     if (cart.items.length === 0) return cart;
 
-    try {
-      await this.prisma.$transaction(async (trx) => {
-        for (const item of cart.items) {
+    /*
+     * Same resilience rules as `removeItem`: a single drifted row must
+     * not block the user from clearing the rest of their cart. We
+     * iterate item-by-item inside one transaction and skip the two
+     * known recoverable cases per row.
+     */
+    await this.prisma.$transaction(async (trx) => {
+      for (const item of cart.items) {
+        try {
+          await trx.cartItem.delete({ where: { id: item.id } });
+        } catch (err) {
+          if (
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === "P2025"
+          ) {
+            continue;
+          }
+          throw err;
+        }
+
+        try {
           await this.inventoryRepository.release(
             item.variantId,
             item.quantity,
             trx,
           );
+        } catch (releaseErr: unknown) {
+          const msg =
+            releaseErr instanceof Error
+              ? releaseErr.message
+              : String(releaseErr);
+
+          if (msg === "INVENTORY_NOT_FOUND") {
+            console.warn(
+              `[cart.clearCart] inventory row missing for variantId=${item.variantId}; ` +
+                `cartItemId=${item.id} deleted without stock release.`,
+            );
+            continue;
+          }
+
+          if (msg === "RELEASE_FAILED") {
+            console.warn(
+              `[cart.clearCart] RELEASE_FAILED cartItemId=${item.id} ` +
+                `variantId=${item.variantId} requestedRelease=${item.quantity}. ` +
+                `Continuing with the rest of the cart.`,
+            );
+            continue;
+          }
+
+          throw releaseErr;
         }
-        await this.cartRepository.clearItems(cart.id, trx);
-      });
-    } catch (error: any) {
-      if (error?.message === "RELEASE_FAILED")
-        throw new BadRequestError(`Release failed: reserved stock mismatch`);
-      throw error;
-    }
+      }
+    });
 
     return (await this.cartRepository.findActiveByUserId(userId))!;
   }

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { useCart } from '@/hooks/useCart';
 import { cn } from '@/lib/cn';
@@ -108,12 +110,27 @@ export function CartSummary({
     navigate(destination);
   };
 
-  const handleClear = async () => {
+  /*
+   * Clear-cart confirmation flow.
+   *
+   *   • `handleClearClick` — opens the dialog. The actual destructive
+   *     call is deferred until the user explicitly confirms.
+   *   • `handleClearConfirm` — performs the network call. Wrapped in
+   *     try/catch/finally so the dialog ALWAYS closes (success,
+   *     failure, or thrown exception), which prevents the "stuck
+   *     spinner" state if the mutation rejects after we've shown the
+   *     loading indicator.
+   */
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const handleClearClick = () => setIsClearConfirmOpen(true);
+  const handleClearConfirm = async () => {
     try {
       await clear();
       toast.success('Cart cleared');
     } catch {
       // Hook has already toasted the error.
+    } finally {
+      setIsClearConfirmOpen(false);
     }
   };
 
@@ -183,13 +200,20 @@ export function CartSummary({
           compact ? 'text-sm' : 'text-base',
         )}
       >
-        <span className={cn('font-medium', compact ? 'text-slate-600' : 'text-slate-900')}>
+        {/*
+          Grand-total row. The "Total" label keeps the strong
+          neutral colour (slate-900) for legibility; only the value
+          carries the brand colour so the eye lands on the number.
+          The PriceTag stays at `size="lg"` and is `font-bold` —
+          it's the visual punch of the sidebar.
+        */}
+        <span className="font-semibold text-slate-900">
           {compact ? 'Total' : 'Total'}
         </span>
         <PriceTag
           value={isSelectionMode ? displayTotal : displaySubtotal}
           size={compact ? 'md' : 'lg'}
-          className="font-semibold"
+          className="text-brand-600 font-bold"
         />
       </div>
 
@@ -211,27 +235,58 @@ export function CartSummary({
 
       {!compact && (
         <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-slate-500">
             Free shipping on orders over ₫500,000.
           </p>
           <button
             type="button"
-            onClick={handleClear}
+            onClick={handleClearClick}
             disabled={isClearing || totalItems === 0}
             className={cn(
-              'inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-danger-600 transition-colors',
+              /*
+                Bumped from text-xs → text-sm so the "Clear cart"
+                affordance reads at the same scale as the rest of
+                the Cart page's secondary copy after the typography
+                refresh. Icons bumped from 12 → 14 to keep them
+                proportional with the new text size.
+              */
+              'inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-danger-600 transition-colors',
               'disabled:opacity-40 disabled:hover:text-slate-500',
             )}
           >
             {isClearing ? (
-              <Loader2 size={12} className="animate-spin" aria-hidden />
+              <Loader2 size={14} className="animate-spin" aria-hidden />
             ) : (
-              <Trash2 size={12} aria-hidden />
+              <Trash2 size={14} aria-hidden />
             )}
             Clear cart
           </button>
         </div>
       )}
+
+      {/*
+        Clear-cart confirmation dialog. Rendered at the bottom of
+        the component so it's a sibling of the rest of the summary,
+        not a child of the Clear-cart row — Modal portals to
+        <body> via its own implementation, so JSX position only
+        affects React tree, not the actual placement.
+
+        `tone="danger"` paints the confirm button red and shows
+        the AlertTriangle icon (see ConfirmDialog.tsx for the
+        mapping). `isLoading={isClearing}` locks the dialog
+        during the in-flight mutation; the cart hook sets this
+        true while `clear()` is awaiting the backend.
+      */}
+      <ConfirmDialog
+        open={isClearConfirmOpen}
+        onClose={() => setIsClearConfirmOpen(false)}
+        title="Clear your cart?"
+        description="Are you sure you want to remove all items from your cart? This action cannot be undone."
+        confirmLabel="Clear Cart"
+        tone="danger"
+        isLoading={isClearing}
+        onConfirm={handleClearConfirm}
+      />
     </div>
   );
 }

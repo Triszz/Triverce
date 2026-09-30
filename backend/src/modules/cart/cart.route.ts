@@ -13,6 +13,13 @@ export const createCartRouter = (controller: CartController) => {
 
   router.get("/", controller.getCart);
   router.post("/items", validate(AddCartItemSchema), controller.addItem);
+  /*
+   * `:itemId` UUID validation lives in `assertUuidItemId` inside the
+   * controller (see cart.controller.ts). That keeps the router a pure
+   * declaration of routes and avoids mixing NestJS pipes with Express
+   * middleware. Without it, a malformed id would slip through to Prisma
+   * and surface as a 500 from the DB layer instead of the expected 400.
+   */
   router.patch(
     "/items/:itemId",
     validate(UpdateCartItemSchema),

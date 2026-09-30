@@ -366,7 +366,15 @@ export function CartPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Your Cart</h1>
             <p className="text-sm text-slate-500 mt-1">
-              {totalItems} {totalItems === 1 ? 'item' : 'items'} ·{' '}
+              {/*
+                Cart count summary — previously `8 items · 3 selected`
+                which read as ambiguous (are the 8 the cart total or
+                the selected total?). Rephrased to make the
+                cart-wide count unambiguous: "8 items in cart · 3
+                selected". Singular/plural stays correct so the
+                sentence is grammatical for a 1-item cart.
+              */}
+              {totalItems} {totalItems === 1 ? 'item' : 'items'} in cart ·{' '}
               <span className="text-slate-700 font-medium">
                 {selectedIds.size} selected
               </span>
@@ -566,7 +574,7 @@ function StoreCard({
               {group.storeName}
             </Link>
           )}
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-slate-500">
             {selectedInStore} of {storeItemIds.length}{' '}
             {storeItemIds.length === 1 ? 'item' : 'items'} selected
           </p>
@@ -627,17 +635,42 @@ function StoreCard({
        * convention.
        */}
       {selectedInStore > 0 && (
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-6 text-sm">
+        /*
+         * Per-store footer typography refresh:
+         *   • Wrapper bumped from `text-sm` → `text-base` so the
+         *     subtotal carries more weight at a glance.
+         *   • Subtotal label and value recoloured to brand-600
+         *     (indigo-deep, #4f46e5) so the eye lands here first
+         *     when scanning multi-store carts.
+         *   • The shipping "Free" line stays success-700 to keep
+         *     the positive-savings signal visually distinct from
+         *     the brand-coloured subtotal.
+         */
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-6 text-base">
+          {/*
+            Label "Store Subtotal:" is neutral (slate-500) so the
+            eye locks onto the brand-coloured value next to it —
+            matches the visual treatment of the shipping label so
+            both footer lines share the same hierarchy.
+          */}
           <div className="flex items-baseline gap-2">
             <span className="text-slate-500">Store Subtotal:</span>
-            <PriceTag value={storeSelectedSubtotal} size="sm" className="font-semibold text-slate-900" />
+            <PriceTag
+              value={storeSelectedSubtotal}
+              size="md"
+              className="text-brand-600 font-semibold"
+            />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-slate-500">Shipping:</span>
             {selectedShippingFee === 0 ? (
               <span className="font-semibold text-success-700">Free</span>
             ) : (
-              <PriceTag value={selectedShippingFee} size="sm" className="font-semibold text-slate-900" />
+              <PriceTag
+                value={selectedShippingFee}
+                size="md"
+                className="text-base font-semibold text-slate-900"
+              />
             )}
           </div>
         </div>

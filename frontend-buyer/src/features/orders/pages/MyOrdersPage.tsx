@@ -244,7 +244,14 @@ export function MyOrdersPage() {
         title="My orders"
         description="Track, view, and manage your Triverce purchases."
       />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      {/*
+        Page container — widened from `max-w-4xl` to `max-w-7xl` to match
+        the Cart page so all primary storefront routes share the same
+        horizontal footprint. `mx-auto` keeps it centred; the
+        `px-4 sm:px-6 lg:px-8` ladder keeps the horizontal padding
+        responsive (16/24/32). The `py-10` mirrors the Cart page.
+      */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Breadcrumb — Home → My Orders. Placed at the very top
          * of the page container, directly above the 'My Orders'
          * heading, with `mb-6` to separate it from the header row. */}

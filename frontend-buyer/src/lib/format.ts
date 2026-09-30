@@ -100,13 +100,13 @@ export function formatRelativeTime(
 }
 
 /**
- * Formats a sold-quantity number into a compact string.
+ * Formats a sold-quantity number into a compact, English-locale string.
  *
  *   0          → ""            (caller suppresses the badge entirely)
- *   999        → "999 Đã bán"
- *   1_000      → "1k+ Đã bán"
- *   12_340     → "12.3k+ Đã bán"
- *   1_000_000  → "1Tr+ Đã bán"
+ *   999        → "999 sold"
+ *   1_000      → "1k+ sold"
+ *   12_340     → "12.3k+ sold"
+ *   1_000_000  → "1M+ sold"
  *
  * Once the count crosses the 1k / 1M rounding thresholds, the suffix
  * gains a trailing `+` so the storefront signals "at least this many"
@@ -114,11 +114,15 @@ export function formatRelativeTime(
  * really be 1_200 or 1_249, and the badge should never claim precision
  * it doesn't have. Under 1k the raw integer is shown verbatim and the
  * `+` is omitted because the value IS exact.
+ *
+ * Note: the millions bucket uses `M` (the SI symbol for 10^6) rather
+ * than the local `Tr` shorthand. Matches the en-US convention used
+ * across the rest of the storefront.
  */
 export function formatSold(count?: number | null): string {
   if (count == null) return '';
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}Tr+ Đã bán`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k+ Đã bán`;
-  if (count > 0) return `${count} Đã bán`;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M+ sold`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k+ sold`;
+  if (count > 0) return `${count} sold`;
   return '';
 }
