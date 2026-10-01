@@ -301,12 +301,20 @@ export function CheckoutPage() {
         {/* Breadcrumb header */}
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
+            {/*
+              Breadcrumb back link. Bumped from text-xs / 12px to
+              text-sm / 16px to match the rest of the checkout
+              typography refresh (recipient name + product name
+              went from text-sm to text-base; this link went one
+              step up from text-xs). The icon scales proportionally
+              so the gap between glyph and label reads correctly.
+            */}
             <button
               type="button"
               onClick={() => navigate('/cart')}
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-2 cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors mb-2 cursor-pointer"
             >
-              <ChevronLeft size={12} aria-hidden />
+              <ChevronLeft size={16} aria-hidden />
               Back to cart
             </button>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Checkout</h1>
@@ -400,7 +408,7 @@ export function CheckoutPage() {
               subtotal={subtotal}
               action={
                 <>
-                  <p className="mb-3 text-center text-xs text-slate-500">
+                  <p className="mb-3 text-center text-sm text-slate-500">
                     By placing this order you agree to our terms of service.
                     {gateway === 'vnpay'
                       ? ` You'll be charged ${formatVND(total)}.`
@@ -416,7 +424,7 @@ export function CheckoutPage() {
                     }
                   />
                   {!confirmedValues ? (
-                    <p className="mt-2 text-center text-xs text-slate-500">
+                    <p className="mt-2 text-center text-sm text-slate-500">
                       Select a shipping address above to continue.
                     </p>
                   ) : (

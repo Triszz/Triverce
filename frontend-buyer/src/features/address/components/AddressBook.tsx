@@ -148,7 +148,7 @@ export function AddressBook({
           <p className="text-sm font-semibold text-slate-900">
             {showNewForm ? 'New address' : 'Add new address'}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-slate-500">
             {showNewForm ? 'Fill in your details below' : 'Use a different delivery address'}
           </p>
         </div>
@@ -244,7 +244,14 @@ function AddressCard({
 
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-slate-900 truncate">
+          {/*
+            Recipient name — bumped from text-sm to text-base so
+            the most-identifying piece of the address card reads
+            at the same scale as the cart's Store Subtotal value,
+            which we synced to text-base earlier. Keeps the icon
+            size unchanged per spec.
+          */}
+          <p className="text-base font-semibold text-slate-900 truncate">
             {address.recipientName}
           </p>
           {address.isDefault && (
@@ -254,11 +261,18 @@ function AddressCard({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+        {/*
+          Phone and full-address rows — bumped from text-xs to
+          text-sm (one step up) so the supporting details stay
+          legible at checkout without competing with the name.
+          Colour stays `text-slate-600` to preserve the original
+          contrast intent.
+        */}
+        <div className="flex items-center gap-1.5 text-sm text-slate-600">
           <Phone size={11} className="shrink-0 text-slate-400" aria-hidden />
           <span className="tabular-nums">{address.phone}</span>
         </div>
-        <div className="flex items-start gap-1.5 text-xs text-slate-600">
+        <div className="flex items-start gap-1.5 text-sm text-slate-600">
           <MapPin size={11} className="shrink-0 mt-0.5 text-slate-400" aria-hidden />
           <span className="leading-relaxed">{address.address}</span>
         </div>

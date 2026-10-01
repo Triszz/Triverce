@@ -108,7 +108,7 @@ export function OrderSummary({ items, subtotal, action, className }: OrderSummar
          * under the items, so the buyer never has to mentally
          * reconcile a detached "PER STORE" list against the global
          * totals. */}
-        <dl className="mt-5 space-y-2 text-sm">
+        <dl className="mt-5 space-y-2 text-base">
           {/*
            * Grand totals — visually separated from the items
            * above by a top border + extra padding. The border
@@ -141,7 +141,7 @@ export function OrderSummary({ items, subtotal, action, className }: OrderSummar
            * smallest gap so the buyer sees the cheapest path to
            * free shipping. */}
           {!grandShippingIsFree && subtotal > 0 && (
-            <p className="text-xs text-slate-500 pt-1">
+            <p className="text-sm text-slate-500 pt-1">
               {/*
                 For brevity we use the gap to the threshold from
                 the smallest per-store subtotal — that's the store
@@ -182,10 +182,18 @@ export function OrderSummary({ items, subtotal, action, className }: OrderSummar
           )}
 
           <div className="border-t border-slate-200 pt-3 mt-3">
+            {/*
+              Grand-total value mirrors the cart's `<PriceTag>` colour
+              — `text-brand-600` is the brand accent that signals
+              "this is the number you're paying". Keeping the label
+              neutral (`text-slate-900 font-semibold` on the left)
+              preserves the visual hierarchy: brand colour is
+              reserved for the value, weight carries the label.
+            */}
             <div className="flex items-baseline justify-between">
               <dt className="text-base font-semibold text-slate-900">Total</dt>
               <dd className="tabular-nums">
-                <PriceTag value={total} size="xl" className="font-bold text-slate-900" />
+                <PriceTag value={total} size="xl" className="font-bold text-brand-600" />
               </dd>
             </div>
             <p className="mt-1 text-xs text-slate-500">
@@ -196,7 +204,7 @@ export function OrderSummary({ items, subtotal, action, className }: OrderSummar
 
         {action && <div className="mt-6">{action}</div>}
 
-        <p className="mt-4 text-center text-xs text-slate-500">
+        <p className="mt-4 text-center text-sm text-slate-500">
           Need to tweak the cart?{' '}
           <Link
             to="/cart"
@@ -284,7 +292,15 @@ function StoreSection({ group, shippingFee }: StoreSectionProps) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-900">
+              {/*
+                Product name bumped from text-sm to text-base so it
+                reads at the same scale as the recipient name in
+                the shipping-address card. Variant copy is kept at
+                text-sm (already one step up from the old text-xs
+                baseline). Qty line bumps from text-xs to text-sm
+                so the unit count stays legible at checkout.
+              */}
+              <p className="truncate text-base font-medium text-slate-900">
                 {item.productName ?? 'Product'}
               </p>
               {(() => {
@@ -293,7 +309,7 @@ function StoreSection({ group, shippingFee }: StoreSectionProps) {
                   <p className="text-sm text-slate-600 truncate">{variantStr}</p>
                 ) : null;
               })()}
-              <p className="text-xs text-slate-500">Qty {item.quantity}</p>
+              <p className="text-sm text-slate-500">Qty {item.quantity}</p>
             </div>
             <PriceTag
               value={item.subtotal}
@@ -316,7 +332,7 @@ function StoreSection({ group, shippingFee }: StoreSectionProps) {
        * design language and gives the buyer a positive
        * affirmation rather than just hiding the cost.
        */}
-      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-1.5 text-sm">
+      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-1.5 text-base">
         <div className="flex justify-between text-slate-600">
           <span>Store subtotal</span>
           <span className="font-medium text-slate-900 tabular-nums">
