@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   ChevronLeft,
+  CreditCard,
   MapPin,
   Phone,
+  Store,
   User,
   XCircle,
   AlertTriangle,
@@ -31,6 +33,10 @@ import {
   formatOrderDate,
   type OrderStatus,
 } from '@/features/orders/orders.types';
+import type {
+  OrderPublic,
+  OrderItemPublic,
+} from '@/services/orderService';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * OrderDetailPage — `/orders/:orderId`
@@ -60,6 +66,29 @@ export function OrderDetailPage() {
 
   const { cancel, isCancelling } = useCancelOrder();
   const [isCancelOpen, setCancelOpen] = useState(false);
+
+  /*
+   * Per-store bucketing. Today every order has a single seller
+   * (one order = one sellerId), so the result is always a
+   * one-element array — but the bucketing is forward-compatible
+   * with any future schema where one order can carry items from
+   * multiple stores. Computed via useMemo so the same item
+   * references stay stable across re-renders triggered by other
+   * state (cancel modal open/close, etc.).
+   *
+   * Hooks-ordering note: this `useMemo` MUST live above every
+   * early return below. The `isLoading` / `isError || !order`
+   * branches exit the component before the data is ready, so
+   * putting this hook there would violate React's "same number
+   * and order of hooks on every render" rule and trip
+   * `Rendered more hooks than during the previous render`.
+   * The null-guard on `order` keeps it safe to call while
+   * `order` is still `undefined`.
+   */
+  const storeGroups = useMemo(
+    () => (order ? groupOrderItemsByStore(order) : []),
+    [order],
+  );
 
   /* ── Loading ────────────────────────────────────────────────────────── */
 
@@ -119,6 +148,13 @@ export function OrderDetailPage() {
   const isPending = order.status === 'pending';
   const itemCount = order.items.reduce((s, it) => s + it.quantity, 0);
 
+  /*
+   * `storeGroups` was hoisted above the early returns — see the
+   * hooks-ordering note at the top of the component. The value
+   * is `[]` during loading/error, which is harmless because the
+   * sections that consume it are not rendered on those paths.
+   */
+
   return (
     <>
       <PageMeta
@@ -126,13 +162,14 @@ export function OrderDetailPage() {
         description={`Status: ${meta.label}. Placed on ${formatOrderDate(order.createdAt)}.`}
       />
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
-      {/* Back link */}
+      {/* Back link — bumped from text-xs / 12px → text-sm / 14px
+       * to match the rest of the order-detail typography. */}
       <button
         type="button"
         onClick={() => navigate('/orders')}
-        className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-4"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors mb-4"
       >
-        <ChevronLeft size={12} aria-hidden />
+        <ChevronLeft size={14} aria-hidden />
         Back to my orders
       </button>
 
@@ -159,48 +196,53 @@ export function OrderDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* ── Left: items + shipping ─────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Items table */}
+          {/* Items section — bucketed by store so the buyer sees a
+           * clear "Sold by <store>" header above each seller's
+           * line items. Today every order has a single seller
+           * (one order = one sellerId), so there is exactly one
+           * group, but the bucketing is forward-compatible with
+           * any future schema where one order can carry items
+           * from multiple stores. */}
           <section className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
             <header className="px-5 py-4 border-b border-slate-100">
               <h2 className="text-sm font-semibold text-slate-900">Items</h2>
             </header>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50">
-                    <th
-                      scope="col"
-                      className="w-1/2 py-4 px-5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-                    >
-                      Product
-                    </th>
-                    <th
-                      scope="col"
-                      className="py-4 px-5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-                    >
-                      Qty
-                    </th>
-                    <th
-                      scope="col"
-                      className="py-4 px-5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-                    >
-                      Unit price
-                    </th>
-                    <th
-                      scope="col"
-                      className="py-4 px-5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-                    >
-                      Subtotal
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.items.map((item) => (
+            {storeGroups.map((group) => (
+              <div
+                key={group.sellerId}
+                className="border-b border-slate-100 last:border-b-0"
+              >
+                {/* Store header — `font-semibold text-slate-900
+                 * hover:text-brand-600 transition-colors` per
+                 * spec. We link to `/store/<sellerId>` so the
+                 * buyer lands on the dedicated Store Detail
+                 * page (the project's canonical seller landing
+                 * surface). The Store icon gives a visual cue. */}
+                <div className="flex items-center justify-between gap-2 px-5 py-3 bg-slate-50/60 border-b border-slate-100">
+                  <Link
+                    to={`/store/${group.sellerId}`}
+                    className="inline-flex items-center gap-2 font-semibold text-slate-900 hover:text-brand-600 transition-colors"
+                  >
+                    <Store size={16} className="text-slate-500" aria-hidden />
+                    <span>
+                      Sold by{' '}
+                      {group.sellerStoreName ?? `Seller #${group.sellerId.slice(0, 8)}`}
+                    </span>
+                  </Link>
+                  <span className="text-xs text-slate-500 tabular-nums">
+                    {group.items.length}{' '}
+                    {group.items.length === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+                {/* Item rows — `role="list"` for AT navigation
+                 * (the parent is a logical list of items). */}
+                <div role="list">
+                  {group.items.map((item) => (
                     <OrderItemRow key={item.id} item={item} />
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            ))}
           </section>
 
           {/* Shipping */}
@@ -211,27 +253,30 @@ export function OrderDetailPage() {
                 Shipping details
               </h2>
             </header>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            {/* Body text bumped text-sm → text-base so recipient
+             * name, phone, and address read at the same scale as
+             * product names and totals. */}
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-base">
               <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-1">
+                <dt className="text-sm font-medium uppercase tracking-wider text-slate-400 mb-1">
                   Recipient
                 </dt>
                 <dd className="flex items-center gap-1.5 text-slate-900 font-medium">
-                  <User size={13} className="text-slate-400" aria-hidden />
+                  <User size={14} className="text-slate-400" aria-hidden />
                   {order.shippingName}
                 </dd>
               </div>
               <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-1">
+                <dt className="text-sm font-medium uppercase tracking-wider text-slate-400 mb-1">
                   Phone
                 </dt>
                 <dd className="flex items-center gap-1.5 text-slate-900 font-medium tabular-nums">
-                  <Phone size={13} className="text-slate-400" aria-hidden />
+                  <Phone size={14} className="text-slate-400" aria-hidden />
                   {order.shippingPhone}
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-1">
+                <dt className="text-sm font-medium uppercase tracking-wider text-slate-400 mb-1">
                   Address
                 </dt>
                 <dd className="text-slate-900 leading-relaxed">
@@ -240,7 +285,7 @@ export function OrderDetailPage() {
               </div>
               {order.note && (
                 <div className="sm:col-span-2">
-                  <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-1">
+                  <dt className="text-sm font-medium uppercase tracking-wider text-slate-400 mb-1">
                     Note from buyer
                   </dt>
                   <dd className="text-slate-700 italic leading-relaxed">
@@ -249,6 +294,40 @@ export function OrderDetailPage() {
                 </div>
               )}
             </dl>
+          </section>
+
+          {/* Payment method — mirrors the Shipping section's card
+           * chrome (rounded-xl, slate-100 border, shadow-sm, p-5)
+           * so the two read as siblings. The header swaps
+           * `MapPin` → `CreditCard` to keep the iconography
+           * consistent. The body shows the gateway label at
+           * `text-base font-medium text-slate-900` and a
+           * status chip below so the buyer can reconcile the
+           * two values at a glance. */}
+          <section
+            className="rounded-xl border border-slate-100 bg-white shadow-sm p-5"
+            aria-labelledby="payment-method-heading"
+          >
+            <header className="mb-4 flex items-center gap-2">
+              <CreditCard size={16} className="text-[#002b5b]" aria-hidden />
+              <h2
+                id="payment-method-heading"
+                className="text-sm font-semibold text-slate-900"
+              >
+                Payment method
+              </h2>
+            </header>
+            <div className="space-y-1.5">
+              <p className="text-base font-medium text-slate-900">
+                {getPaymentMethodLabel(order.paymentMethod)}
+              </p>
+              <p className="text-sm text-slate-500 flex items-center gap-2">
+                <span>Status:</span>
+                <Badge tone={getPaymentStatusTone(order.paymentStatus)}>
+                  {getPaymentStatusLabel(order.paymentStatus)}
+                </Badge>
+              </p>
+            </div>
           </section>
         </div>
 
@@ -260,7 +339,7 @@ export function OrderDetailPage() {
               <h2 className="text-sm font-semibold text-slate-900">
                 Status timeline
               </h2>
-              <p className="mt-0.5 text-xs text-slate-500">{meta.description}</p>
+              <p className="mt-0.5 text-sm text-slate-500">{meta.description}</p>
             </header>
             <OrderTimeline logs={order.statusLogs} />
           </section>
@@ -270,6 +349,10 @@ export function OrderDetailPage() {
             <h2 className="text-sm font-semibold text-slate-900 mb-3">
               Order total
             </h2>
+            {/* Card body uses text-sm so the Items / Shipping labels
+             * stay at the smaller "label" scale; values inherit
+             * text-sm too. The Total row is the only place we
+             * override to text-base for the "final number" weight. */}
             <dl className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <dt className="text-slate-500">Items</dt>
@@ -290,8 +373,8 @@ export function OrderDetailPage() {
                 </dd>
               </div>
               <div className="border-t border-slate-200 pt-2 mt-2 flex items-center justify-between">
-                <dt className="font-semibold text-slate-900">Total</dt>
-                <dd className="text-lg font-bold text-slate-900 tabular-nums">
+                <dt className="text-base font-semibold text-slate-900">Total</dt>
+                <dd className="text-lg font-bold text-brand-600 tabular-nums">
                   {formatVND(order.totalAmount)}
                 </dd>
               </div>
@@ -310,13 +393,13 @@ export function OrderDetailPage() {
                   Cancel order
                 </Button>
               ) : (
-                <p className="text-xs text-slate-500 text-center">
+                <p className="text-sm text-slate-500 text-center">
                   This order can no longer be cancelled.
                 </p>
               )}
               <Link
                 to="/shop"
-                className="block text-center text-xs font-medium text-[#002b5b] hover:text-[#001f3f] transition-colors"
+                className="block text-center text-sm font-medium text-[#002b5b] hover:text-[#001f3f] transition-colors"
               >
                 Continue shopping →
               </Link>
@@ -339,6 +422,132 @@ export function OrderDetailPage() {
     </div>
     </>
   );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Payment-method display helpers
+ *
+ * `order.paymentMethod` and `order.paymentStatus` come back from
+ * `GET /orders/:id` as raw enum strings (`momo`, `vnpay`, `cod`,
+ * `paid`, `pending`, …). The UI wants friendly labels and a
+ * status-tone badge.
+ *
+ * Maps are local to this file because:
+ *   • `PAYMENT_METHOD_LABELS` mirrors the `CheckoutGateway` /
+ *     backend `PaymentGateway` enums — co-locating it with the
+ *     consumer avoids an import cycle if these labels ever need
+ *     to differ between the seller dashboard and the buyer
+ *     order-detail surface.
+ *   • The helper functions take the wire type and return React-
+ *     friendly strings — no domain logic, safe to define here.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cod: 'Cash on Delivery (COD)',
+  vnpay: 'VNPay',
+  momo: 'MoMo',
+  stripe: 'Stripe',
+};
+
+/* `PaymentState` mirrors the backend `payment_status` enum:
+ *   pending → processing → paid / failed / cancelled / refunded.
+ * The labels mirror the wording used in the payment-history email
+ * templates so buyers see the same copy across channels. */
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  processing: 'Processing',
+  paid: 'Paid',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
+};
+
+/**
+ * Resolve a `paymentMethod` enum string to a buyer-friendly label.
+ * Falls back to the raw value (title-cased) when the enum grows
+ * and the backend ships a code we haven't mapped yet — keeps the
+ * UI from rendering `undefined` or an empty string.
+ */
+function getPaymentMethodLabel(method: string | null | undefined): string {
+  if (!method) return 'Not selected';
+  return PAYMENT_METHOD_LABELS[method] ?? method.charAt(0).toUpperCase() + method.slice(1);
+}
+
+/** Same fallback policy as `getPaymentMethodLabel`. */
+function getPaymentStatusLabel(status: string | null | undefined): string {
+  if (!status) return 'Unknown';
+  return PAYMENT_STATUS_LABELS[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/**
+ * Map a `PaymentState` to a `Badge` tone so the chip colour
+ * matches the rest of the order-detail page (paid = success,
+ * failed/cancelled = danger, etc.). Defaults to `neutral` for
+ * unknown values — same defensive policy as the label helpers.
+ */
+function getPaymentStatusTone(
+  status: string | null | undefined,
+): 'success' | 'warning' | 'danger' | 'neutral' {
+  switch (status) {
+    case 'paid':
+    case 'refunded':
+      return 'success';
+    case 'pending':
+    case 'processing':
+      return 'warning';
+    case 'failed':
+    case 'cancelled':
+      return 'danger';
+    default:
+      return 'neutral';
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Per-store bucketing helper
+ *
+ * The order-detail page groups items by store so the buyer sees a
+ * "Sold by …" header above each storefront's line items. Today
+ * every order carries items from a single seller (the order's
+ * `sellerId`), so the result is always a one-element array — but
+ * the bucketing is forward-compatible with a future schema where
+ * one order can carry items from multiple stores.
+ *
+ * Why a local helper instead of `groupCartItemsByStore` from
+ * `@/features/cart/cartGrouping`: the cart helper operates on
+ * `CartItemPublic`, which is structurally similar but a distinct
+ * type. Importing it here would either need a type-cast or a
+ * shared base type. The two are small, stable, and the risk of
+ * drift is low (each surface renders its own store group
+ * independently) — duplicating the few lines keeps the boundary
+ * crisp.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+export interface OrderStoreGroup {
+  sellerId: string;
+  sellerStoreName: string | null;
+  items: OrderItemPublic[];
+}
+
+function groupOrderItemsByStore(order: OrderPublic): OrderStoreGroup[] {
+  const groups: OrderStoreGroup[] = [];
+  for (const item of order.items) {
+    // The order wire carries the sellerId on the order, not on
+    // each item. Every item in a single order belongs to the same
+    // seller, so we key the group on the order-level sellerId.
+    const existing = groups.find((g) => g.sellerId === order.sellerId);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      groups.push({
+        sellerId: order.sellerId,
+        sellerStoreName: order.sellerStoreName ?? null,
+        items: [item],
+      });
+    }
+  }
+  return groups;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

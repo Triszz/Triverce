@@ -139,12 +139,37 @@ export class OrderRepository {
     const row = await client.order.findUnique({ where: { id: orderId } });
     if (!row) return null;
 
-    const [items, logs, payment] = await Promise.all([
+    const [items, logs, payment, sellerStoreName] = await Promise.all([
       this.loadItems(orderId, client),
       this.loadStatusLogs(orderId, client),
       this.loadPayment(row.paymentId, client),
+      this.loadSellerStoreName(row.sellerId, client),
     ]);
-    return OrderEntity.fromDatabase(row, items, logs, payment);
+    return OrderEntity.fromDatabase(row, items, logs, payment, sellerStoreName);
+  }
+
+  /**
+   * Issue #4 fix: pull the seller's `store_name` alongside the order
+   * so the buyer order-detail page can render a clickable store
+   * header (e.g. "Sold by Áo Thun Store") instead of the bare
+   * `sellerId` UUID. The `User` relation uses `onDelete: Restrict`,
+   * so the seller row is guaranteed to exist for any order that
+   * loaded — `null` only happens for accounts that cleared their
+   * storefront name (rare, intentional).
+   *
+   * Single round-trip; runs in parallel with the other `loadX`
+   * fetches in `findById` so the order wire stays at the same
+   * latency as before this addition.
+   */
+  private async loadSellerStoreName(
+    sellerId: string,
+    client: PrismaClient | Prisma.TransactionClient = this.prisma,
+  ): Promise<string | null> {
+    const row = await client.user.findUnique({
+      where: { id: sellerId },
+      select: { storeName: true },
+    });
+    return row?.storeName ?? null;
   }
 
   /**
@@ -441,6 +466,12 @@ export class OrderRepository {
     // The relation depth is small (1 row per item, variant has at most a
     // handful of attribute values) so the extra join cost is negligible
     // compared to the listing round-trip.
+    //
+    // Order Detail (buyer side) additionally needs the product's
+    // `slug` and `images` so each row can link to `/product/:slug`
+    // and show a thumbnail. The `imageUrl` is now resolved with
+    // a clear priority: variant.imageUrl (variant-specific shot) →
+    // product.images[0] (catalog thumbnail) → null.
     const rows = await client.orderItem.findMany({
       where: { orderId },
       include: {
@@ -453,14 +484,22 @@ export class OrderRepository {
                 attribute: { select: { name: true } },
               },
             },
+            product: {
+              select: {
+                slug: true,
+                images: true,
+              },
+            },
           },
         },
       },
     });
     return rows.map((row) =>
       OrderItemEntity.fromDatabase(row, {
-        imageUrl: row.variant?.imageUrl ?? null,
+        imageUrl:
+          row.variant?.imageUrl ?? row.variant?.product?.images?.[0] ?? null,
         attributeValues: row.variant?.attributeValues ?? [],
+        productSlug: row.variant?.product?.slug ?? null,
       }),
     );
   }

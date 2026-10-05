@@ -72,19 +72,25 @@ export function OrderTimeline({ logs, className }: OrderTimelineProps) {
 
             {/* Body */}
             <div className="min-w-0">
+              {/* Status name — bumped text-sm → text-base so it
+               * matches the rest of the order-detail typography
+               * (product name, subtotal, recipient, etc.). */}
               <p
                 className={
                   isLatest
-                    ? 'text-sm font-semibold text-slate-900'
-                    : 'text-sm font-medium text-slate-700'
+                    ? 'text-base font-semibold text-slate-900'
+                    : 'text-base font-medium text-slate-700'
                 }
               >
                 {toLabel}
               </p>
               {log.note && (
-                <p className="mt-0.5 text-xs text-slate-500">{log.note}</p>
+                /* Caption under the status name — text-xs → text-sm
+                 * so the descriptive line and the status name read
+                 * at the same scale. */
+                <p className="mt-0.5 text-sm text-slate-500">{log.note}</p>
               )}
-              <p className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+              <p className="mt-0.5 text-sm text-slate-400 tabular-nums">
                 {formatOrderDate(log.createdAt)}
               </p>
             </div>

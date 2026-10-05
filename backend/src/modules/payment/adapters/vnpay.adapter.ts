@@ -89,11 +89,38 @@ export class VNPayAdapter implements IPaymentGateway {
       vnp_TxnRef: params.paymentId,
     };
 
+    /*
+     * ── DEBUG LOG ────────────────────────────────────────────────────────
+     * This log fires EVERY time a VNPay session is created. It prints
+     * the complete raw params BEFORE the signed query is built so you
+     * can cross-check with the sandbox portal's "Test transaction"
+     * tool. Copy the printed vnp_Params object and the resulting
+     * paymentUrl and paste them into a note for debugging.
+     *
+     * HOW TO READ THE LOG:
+     *   1. Look for "🔵 [VNPay] vnp_Params:" in the backend console.
+     *   2. Verify vnp_TmnCode, vnp_Amount, vnp_TxnRef match your DB.
+     *   3. Confirm vnp_Version = 2.1.0 and vnp_Command = pay.
+     *   4. Paste the paymentUrl into a browser to confirm it reaches
+     *      the sandbox without a 71.
+     *   5. If error 71 still appears, the TmnCode in your .env is likely
+     *      invalid — VNPay Sandbox only accepts the TmnCode that was
+     *      assigned when you registered the sandbox merchant account.
+     * ─────────────────────────────────────────────────────────────────────
+     */
+    console.log("\n🔵 [VNPay] vnp_Params (raw, pre-hash):");
+    console.log(JSON.stringify(rawParams, null, 2));
+    console.log("[VNPay] tmnCode from env →", JSON.stringify(this.config.tmnCode));
+    console.log("[VNPay] payUrl from env →", JSON.stringify(this.config.payUrl));
+
     const signedQuery = this.buildSignedQuery(rawParams);
+
+    const paymentUrl = `${this.config.payUrl}?${signedQuery}`;
+    console.log("[VNPay] Final paymentUrl:", paymentUrl, "\n");
 
     return {
       gatewayRef: params.paymentId, // VNPay uses our paymentId as TxnRef for idempotency
-      paymentUrl: `${this.config.payUrl}?${signedQuery}`,
+      paymentUrl,
     };
   }
 

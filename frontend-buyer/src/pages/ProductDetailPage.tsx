@@ -379,7 +379,7 @@ export function ProductDetailPage() {
     try {
       await addItem({ variantId: selectedVariant.id, quantity });
       toast.success(
-        `Added "${product.name}" (${selectedVariant.sku}) to cart`,
+        `Added "${product.name}" to cart`,
       );
       openCartDrawer();
     } catch {

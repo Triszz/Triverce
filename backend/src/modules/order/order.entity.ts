@@ -52,14 +52,21 @@ export class OrderEntity {
     public readonly note: string | null,
     public readonly cancelledReason: string | null,
     public readonly paymentId: string | null,
-    /**
-     * Payment method + status. Defaults to `null` for orders without
-     * a linked payment row (rare — almost every checkout writes a
-     * payment, even for COD). Populated by the repository; the
-     * service layer never sets it directly.
-     */
-    public readonly payment: OrderPaymentPayload | null,
-    public readonly items: OrderItemEntity[],
+  /**
+   * Payment method + status. Defaults to `null` for orders without
+   * a linked payment row (rare — almost every checkout writes a
+   * payment, even for COD). Populated by the repository; the
+   * service layer never sets it directly.
+   */
+  public readonly payment: OrderPaymentPayload | null,
+  /**
+   * Seller's storefront name. Loaded by the repository from the
+   * `users.store_name` column. `null` for legacy orders whose
+   * seller account has since had their storeName cleared, or for
+   * admin-created orders with no real seller.
+   */
+  public readonly sellerStoreName: string | null,
+  public readonly items: OrderItemEntity[],
     public readonly statusLogs: OrderStatusLogEntity[],
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
@@ -86,6 +93,7 @@ export class OrderEntity {
     items: OrderItemEntity[] = [],
     statusLogs: OrderStatusLogEntity[] = [],
     payment: OrderPaymentPayload | null = null,
+    sellerStoreName: string | null = null,
   ): OrderEntity {
     return new OrderEntity(
       row.id,
@@ -101,6 +109,7 @@ export class OrderEntity {
       row.cancelledReason,
       row.paymentId ?? null,
       payment,
+      sellerStoreName,
       items,
       statusLogs,
       row.createdAt,
@@ -112,6 +121,7 @@ export class OrderEntity {
     return {
       id: this.id,
       sellerId: this.sellerId,
+      sellerStoreName: this.sellerStoreName,
       status: this.status,
       totalAmount: this.totalAmount,
       shippingFee: this.shippingFee,

@@ -157,14 +157,15 @@ export function WriteReviewModal({ open, onClose, order }: WriteReviewModalProps
               key={item.id}
               className="rounded-xl border border-slate-200 p-4 space-y-3"
             >
-              {/* Item header */}
+              {/* Item header — internal SKU removed (operations detail);
+               * only the quantity line remains so the buyer sees the unit
+               * count they're reviewing. If we surface Color/Size/etc.
+               * later, slot it before `Qty …`. */}
               <div>
                 <p className="text-sm font-semibold text-slate-900">
                   {item.productName}
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Variant SKU: <span className="font-mono">{item.variantSku}</span>
-                  {' · '}
                   Qty {item.quantity}
                 </p>
               </div>

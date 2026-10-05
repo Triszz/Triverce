@@ -13,6 +13,11 @@ import apiClient from './apiClient';
 export type CheckoutGateway = 'momo' | 'stripe' | 'vnpay' | 'cod';
 
 /** Public shape of an order item (mirrors `OrderItemEntity.toPublic()`). */
+export interface OrderItemAttributePublic {
+  name: string;
+  value: string;
+}
+
 export interface OrderItemPublic {
   id: string;
   variantId: string;
@@ -21,6 +26,23 @@ export interface OrderItemPublic {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  /**
+   * Resolved thumbnail for the item. `null` for items whose
+   * variant+product relation couldn't be loaded (rare). The
+   * image priority is variant.imageUrl → product.images[0].
+   */
+  imageUrl: string | null;
+  /**
+   * Resolved variant attributes (e.g. Color/Size). `[]` for
+   * variants without attributes.
+   */
+  attributes: OrderItemAttributePublic[];
+  /**
+   * Product slug — only populated on order-detail responses
+   * (single-order fetch). `null` on list responses for forward
+   * compatibility. Used to build `/product/:slug` deep links.
+   */
+  productSlug: string | null;
 }
 
 /** Public shape of an order status log entry. */
@@ -36,6 +58,12 @@ export interface OrderStatusLogPublic {
 export interface OrderPublic {
   id: string;
   sellerId: string;
+  /**
+   * Seller's storefront name. Populated by the order-detail
+   * endpoint so the page can render a clickable store header.
+   * `null` on list responses (no per-row seller join).
+   */
+  sellerStoreName: string | null;
   status: 'pending' | 'confirmed' | 'shipping' | 'delivered' | 'cancelled' | 'failed';
   totalAmount: number;
   shippingFee: number;

@@ -15,6 +15,13 @@ export interface OrderItemVariantPayload {
     value: string;
     attribute: { name: string };
   }>;
+  /**
+   * Product slug — used by the buyer order-detail page to deep-link
+   * the product name back to `/product/:slug`. `null` for items
+   * whose variant.product was deleted (the relation has
+   * `onDelete: Restrict`, so this is rare).
+   */
+  productSlug: string | null;
 }
 
 /**
@@ -43,6 +50,12 @@ export class OrderItemEntity {
     public readonly imageUrl: string | null,
     public readonly attributes: OrderItemAttribute[],
     public readonly createdAt: Date,
+    /**
+     * Product slug for deep-linking in the buyer order-detail page.
+     * `null` when the variant's product was deleted (rare, due to
+     * `onDelete: Restrict`).
+     */
+    public readonly productSlug: string | null,
   ) {}
 
   get subtotal(): number {
@@ -51,7 +64,11 @@ export class OrderItemEntity {
 
   static fromDatabase(
     row: OrderItem,
-    variant: OrderItemVariantPayload = { imageUrl: null, attributeValues: [] },
+    variant: OrderItemVariantPayload = {
+      imageUrl: null,
+      attributeValues: [],
+      productSlug: null,
+    },
   ): OrderItemEntity {
     return new OrderItemEntity(
       row.id,
@@ -67,6 +84,7 @@ export class OrderItemEntity {
         value: a.value,
       })),
       row.createdAt,
+      variant.productSlug,
     );
   }
 
@@ -81,6 +99,7 @@ export class OrderItemEntity {
       subtotal: this.subtotal,
       imageUrl: this.imageUrl,
       attributes: this.attributes,
+      productSlug: this.productSlug,
     };
   }
 }
